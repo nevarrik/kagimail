@@ -1,20 +1,20 @@
 package main
 
 import (
-	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
 func main() {
 	g_ui.app = tview.NewApplication()
 
-	g_ui.foldersPane = tview.NewTextView()
+	g_ui.foldersPane = tview.NewList()
 	g_ui.emailsPane = tview.NewList()
 	g_ui.previewPane = tview.NewTextView()
 	g_ui.statusBar = tview.NewTextView()
 
-	g_ui.foldersPane.SetText("inbox").
-		SetTextColor(tcell.ColorWhite).
+	g_ui.foldersPane.
+		SetHighlightFullLine(true).
+		ShowSecondaryText(false).
 		SetBorder(true).
 		SetTitle("Folders")
 

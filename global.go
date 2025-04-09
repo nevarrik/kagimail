@@ -8,7 +8,7 @@ import (
 
 type UI struct {
 	app         *tview.Application
-	foldersPane *tview.TextView
+	foldersPane *tview.List
 	emailsPane  *tview.List
 	previewPane *tview.TextView
 	statusBar   *tview.TextView

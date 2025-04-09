@@ -31,24 +31,27 @@ type Email struct {
 }
 
 var (
-	chCheckForNewMessages chan bool
+	chCheckForNewMessages chan string
 	chDownloadEmailByUid  chan uint32
+	chDownloadFolders     chan bool
 )
 
 func grabEmail(id uint32) {
 	chDownloadEmailByUid <- id
 }
 
-func grabLatestEmails() {
-	chCheckForNewMessages <- true
+func grabLatestEmails(folder string) {
+	chCheckForNewMessages <- folder
 }
 
 func imapInit() {
-	chCheckForNewMessages = make(chan bool, 1)
+	chCheckForNewMessages = make(chan string, 10)
 	chDownloadEmailByUid = make(chan uint32, 10)
+	chDownloadFolders = make(chan bool, 1)
 
 	go imapWorker()
-	grabLatestEmails()
+	grabLatestEmails("inbox")
+	chDownloadFolders <- true
 }
 
 func imapWorker() {
@@ -73,8 +76,10 @@ func imapWorker() {
 		FecthLast10Emails
 	)
 
-	fetchEmail := func(uid uint32, handleImapEmail func(*imap.Message), flags uint32) {
-		mailbox, err := clt.Select("inbox", true)
+	fetchEmail := func(
+		uid uint32, folder string, handleImapEmail func(*imap.Message), flags uint32,
+	) {
+		mailbox, err := clt.Select(folder, true)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -120,54 +125,43 @@ func imapWorker() {
 		}
 	}
 
+	// joined client commands
 	for {
 		select {
-		case <-chCheckForNewMessages:
-			fetchEmail(0, appendImapEmailToUI, FecthLast10Emails)
+		case folder := <-chCheckForNewMessages:
+			fetchEmail(0, folder, appendImapEmailToUI, FecthLast10Emails)
 
 		case emailUid := <-chDownloadEmailByUid:
-			fetchEmail(emailUid, updateEmailBody, FetchBodyViaUID)
+			folder, _ := g_ui.foldersPane.GetItemText(
+				g_ui.foldersPane.GetCurrentItem(),
+			)
+			fetchEmail(
+				emailUid,
+				folder,
+				updateEmailBody,
+				FetchBodyViaUID,
+			)
 
-			_, err := clt.Select("inbox", true)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			g_ui.app.QueueUpdateDraw(func() {
-				g_ui.statusBar.SetText(
-					fmt.Sprintf("downloading email.id: %d", emailUid),
-				)
-			})
-
-			seqSet := new(imap.SeqSet)
-			seqSet.AddNum(emailUid)
-			emails := make(chan *imap.Message, 10)
+		case <-chDownloadFolders:
+			mailboxes := make(chan *imap.MailboxInfo, 10)
 			done := make(chan error, 1)
 			go func() {
-				section := &imap.BodySectionName{
-					Peek: false,
-				}
-
-				done <- clt.UidFetch(seqSet, []imap.FetchItem{
-					imap.FetchUid, section.FetchItem(),
-				}, emails)
+				done <- clt.List("" /* base */, "*", mailboxes)
 			}()
 
-		fetchLoop2:
-			for {
-				select {
-				case imapMail, ok := <-emails:
-					if !ok {
-						break fetchLoop2
-					}
+			for mailbox := range mailboxes {
+				g_ui.app.QueueUpdateDraw(func() {
+					g_ui.foldersPane.AddItem(mailbox.Name, "", 0,
+						func() {
+							g_ui.emailsPane.Clear()
+							grabLatestEmails(mailbox.Name)
+						})
+				})
+			}
 
-					updateEmailBody(imapMail)
-
-				case err = <-done:
-					if err != nil {
-						log.Fatal(err)
-					}
-				}
+			err := <-done
+			if err != nil {
+				log.Fatal(err)
 			}
 
 		case <-time.After(2 * time.Second):
