@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"sort"
 	"strings"
 	"time"
 
@@ -15,19 +14,14 @@ import (
 	"github.com/emersion/go-message/mail"
 )
 
-type IMAPConfig struct {
-	IMAPHost string `toml:"imap_host"`
-	SMTPHost string `toml:"smtp_host"`
-	Email    string `toml:"email"`
-	Password string `toml:"password"`
-}
-
 type Email struct {
-	id      uint32
-	subject string
-	date    time.Time
-	from    string
-	body    string
+	id          uint32
+	subject     string
+	date        time.Time
+	toAddress   string
+	fromAddress string
+	fromName    string
+	body        string
 }
 
 var (
@@ -163,20 +157,12 @@ func imapWorker() {
 			if err != nil {
 				log.Fatal(err)
 			}
-
-		case <-time.After(2 * time.Second):
-			g_ui.app.QueueUpdateDraw(func() {
-				g_ui.statusBar.SetText("idle")
-			})
 		}
 	}
 }
 
-func updateStatusBar(text string) {
-	g_ui.app.QueueUpdateDraw(func() { g_ui.statusBar.SetText(text) })
-}
-
 func updateEmailBody(imapEmail *imap.Message) {
+	Require(imapEmail.Uid != 0, "requires uid")
 	section := &imap.BodySectionName{
 		Peek: false,
 	}
@@ -227,41 +213,35 @@ func updateEmailBody(imapEmail *imap.Message) {
 
 			if strings.Contains(contentType, "text/plain") {
 				data, _ := io.ReadAll(part.Body)
-				g_ui.app.QueueUpdateDraw(func() {
-					g_ui.previewPane.SetText(string(data))
-				})
+				PreviewPaneSetBody(imapEmail.Uid, string(data))
 				return
 			}
 		}
 	}
 	g_ui.app.QueueUpdateDraw(func() {
 		g_ui.previewPane.SetText(
-			fmt.Sprintf("no plaintext found, size was: %s", humanReadableSize(n)),
+			fmt.Sprintf(
+				"no plaintext found, size was: %s",
+				humanReadableSize(n),
+			),
+			false,
 		)
 	})
 }
 
 func appendImapEmailToUI(imapEmail *imap.Message) {
-	fnDateCompare := func(e1 Email, e2 Email) bool {
-		return e1.date.After(e2.date)
-	}
-
 	email := Email{
 		imapEmail.Uid,
 		imapEmail.Envelope.Subject,
 		imapEmail.Envelope.Date,
+		imapEmail.Envelope.To[0].Address(),
 		imapEmail.Envelope.From[0].Address(),
+		imapEmail.Envelope.From[0].PersonalName,
 		"",
 	}
 
 	g_emailsMtx.Lock()
-	i := sort.Search(len(g_emails), func(k int) bool {
-		return !fnDateCompare(g_emails[k], email)
-	})
-
-	g_emails = append(g_emails, Email{})
-	copy(g_emails[i+1:], g_emails[i:])
-	g_emails[i] = email
+	g_emailsTbl[email.id] = email
 	g_emailsMtx.Unlock()
 
 	g_ui.app.QueueUpdateDraw(func() {
@@ -271,7 +251,7 @@ func appendImapEmailToUI(imapEmail *imap.Message) {
 			fmt.Sprintf(
 				"%s from: %s",
 				email.date.Format(time.RFC3339),
-				email.from,
+				email.fromAddress,
 			),
 			0,
 			func() {

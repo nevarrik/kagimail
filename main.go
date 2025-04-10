@@ -5,11 +5,13 @@ import (
 )
 
 func main() {
+	g_emailsTbl = make(map[uint32]Email)
+
 	g_ui.app = tview.NewApplication()
 
 	g_ui.foldersPane = tview.NewList()
 	g_ui.emailsPane = tview.NewList()
-	g_ui.previewPane = tview.NewTextView()
+	g_ui.previewPane = tview.NewTextArea()
 	g_ui.statusBar = tview.NewTextView()
 
 	g_ui.foldersPane.
@@ -26,8 +28,6 @@ func main() {
 		SetBorder(true).
 		SetTitle("Preview")
 
-	g_ui.statusBar.SetText("status: good")
-
 	g_ui.columnsPane = tview.NewFlex().
 		SetDirection(tview.FlexColumn).
 		AddItem(g_ui.foldersPane, 0, 1, false).
@@ -43,6 +43,7 @@ func main() {
 	g_ui.app.SetFocus(g_ui.emailsPane)
 
 	go imapInit()
+	go smtpInit()
 
 	err := g_ui.app.Run()
 	if err != nil {
