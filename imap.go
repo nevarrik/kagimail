@@ -67,7 +67,7 @@ func imapWorker() {
 
 	const (
 		FetchBodyViaUID = 1 << iota
-		FecthLast10Emails
+		FetchAllEmails
 	)
 
 	fetchEmail := func(
@@ -77,55 +77,71 @@ func imapWorker() {
 		if err != nil {
 			log.Fatal(err)
 		}
+		notifyFetchStarted(folder, int(mailbox.Messages))
 
-		emails := make(chan *imap.Message, 10)
-		done := make(chan error, 1)
-		seqSet := new(imap.SeqSet)
-		if flags&FecthLast10Emails != 0 {
-			seqSet.AddRange(max(0, mailbox.Messages-10), mailbox.Messages)
-			go func() {
-				done <- clt.Fetch(seqSet, []imap.FetchItem{
-					imap.FetchEnvelope, imap.FetchUid,
-				}, emails)
-			}()
-		} else if flags&FetchBodyViaUID != 0 {
-			seqSet.AddNum(uid)
-			go func() {
-				section := &imap.BodySectionName{
-					Peek: false,
-				}
+		k := 0
+		n := 0
+		chunkSize := 10
+		// retrieving in chunks, from newest to oldest
+		for lo := int(mailbox.Messages); lo > 0; {
+			// construct request to fetch emails
+			emails := make(chan *imap.Message, 10)
+			done := make(chan error, 1)
+			seqSet := new(imap.SeqSet)
+			hi := lo
+			lo -= chunkSize
+			lo = max(0, lo)
 
-				done <- clt.UidFetch(seqSet, []imap.FetchItem{
-					imap.FetchUid, section.FetchItem(),
-				}, emails)
-			}()
-		}
+			if flags&FetchAllEmails != 0 {
+				seqSet.AddRange(uint32(lo+1), uint32(hi))
+				n += hi - lo
+				go func() {
+					done <- clt.Fetch(seqSet, []imap.FetchItem{
+						imap.FetchEnvelope, imap.FetchUid,
+					}, emails)
+				}()
+			} else if flags&FetchBodyViaUID != 0 {
+				seqSet.AddNum(uid)
+				go func() {
+					section := &imap.BodySectionName{
+						Peek: false,
+					}
 
-	fetchLoop:
-		for {
-			select {
-			case imapEmail, ok := <-emails:
-				if !ok {
-					break fetchLoop
-				}
+					done <- clt.UidFetch(seqSet, []imap.FetchItem{
+						imap.FetchUid, section.FetchItem(),
+					}, emails)
+				}()
+			}
 
-				handleImapEmail(imapEmail)
+		fetchLoop:
+			// read from channel and use handleImapEmail handler
+			for {
+				select {
+				case imapEmail, ok := <-emails:
+					if !ok {
+						break fetchLoop
+					}
 
-			case err = <-done:
-				if err != nil {
-					log.Fatal(err)
+					k++
+					handleImapEmail(imapEmail)
+
+				case err = <-done:
+					if err != nil {
+						log.Fatal(err)
+					}
 				}
 			}
-		}
-	}
+		} // end: for lo := ...
+	} // end: fetchEmail := func( ...
 
 	// joined client commands
 	for {
 		select {
 		case folder := <-chCheckForNewMessages:
-			fetchEmail(0, folder, appendImapEmailToUI, FecthLast10Emails)
+			fetchEmail(0, folder, appendImapEmailToUI, FetchAllEmails)
 
 		case emailUid := <-chDownloadEmailByUid:
+			// fixme: is it wise to be querying the ui here?
 			folder, _ := g_ui.foldersPane.GetItemText(
 				g_ui.foldersPane.GetCurrentItem(),
 			)
@@ -144,13 +160,7 @@ func imapWorker() {
 			}()
 
 			for mailbox := range mailboxes {
-				g_ui.app.QueueUpdateDraw(func() {
-					g_ui.foldersPane.AddItem(mailbox.Name, "", 0,
-						func() {
-							g_ui.emailsPane.Clear()
-							grabLatestEmails(mailbox.Name)
-						})
-				})
+				insertFolderToList(mailbox.Name)
 			}
 
 			err := <-done
@@ -213,7 +223,7 @@ func updateEmailBody(imapEmail *imap.Message) {
 
 			if strings.Contains(contentType, "text/plain") {
 				data, _ := io.ReadAll(part.Body)
-				PreviewPaneSetBody(imapEmail.Uid, string(data))
+				previewPaneSetBody(imapEmail.Uid, string(data))
 				return
 			}
 		}
@@ -234,29 +244,24 @@ func appendImapEmailToUI(imapEmail *imap.Message) {
 		imapEmail.Uid,
 		imapEmail.Envelope.Subject,
 		imapEmail.Envelope.Date,
-		imapEmail.Envelope.To[0].Address(),
-		imapEmail.Envelope.From[0].Address(),
-		imapEmail.Envelope.From[0].PersonalName,
+		"",
+		"",
+		"",
 		"",
 	}
 
+	if len(imapEmail.Envelope.To) > 0 {
+		email.toAddress = imapEmail.Envelope.To[0].Address()
+	}
+
+	if len(imapEmail.Envelope.From) > 0 {
+		email.fromAddress = imapEmail.Envelope.From[0].Address()
+		email.fromName = imapEmail.Envelope.From[0].PersonalName
+	}
+
 	g_emailsMtx.Lock()
-	g_emailsTbl[email.id] = email
+	g_emailFromUid[email.id] = email
 	g_emailsMtx.Unlock()
 
-	g_ui.app.QueueUpdateDraw(func() {
-		g_ui.emailsPane.InsertItem(
-			0,
-			email.subject,
-			fmt.Sprintf(
-				"%s from: %s",
-				email.date.Format(time.RFC3339),
-				email.fromAddress,
-			),
-			0,
-			func() {
-				go grabEmail(email.id)
-			},
-		)
-	})
+	insertImapEmailToList(email)
 }

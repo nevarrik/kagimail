@@ -7,15 +7,20 @@ import (
 )
 
 type UI struct {
-	app         *tview.Application
-	foldersPane *tview.List
-	emailsPane  *tview.List
-	previewPane *tview.TextArea
-	previewUid  uint32
-	statusBar   *tview.TextView
+	app                        *tview.Application
+	foldersPane                *tview.List
+	emailsList                 *tview.List
+	emailsStatusBar            *tview.TextView
+	emailsFolderSelected       string
+	emailsFolderItemCount      int
+	emailsFolderItemDownloaded int
+	previewPane                *tview.TextArea
+	previewUid                 uint32
+	statusBar                  *tview.TextView
 
 	columnsPane *tview.Flex
 	mainPane    *tview.Flex
+	emailsPane  *tview.Flex
 }
 
 type MailConfig struct {
@@ -30,6 +35,7 @@ var (
 	g_ui     UI
 	g_config MailConfig
 
-	g_emailsMtx sync.Mutex
-	g_emailsTbl map[uint32]Email
+	g_emails    []Email
+	g_emailsMtx                 sync.Mutex
+	g_emailFromUid              map[uint32]Email
 )

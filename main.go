@@ -1,16 +1,34 @@
 package main
 
 import (
+	"log"
+	"os"
+
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
 func main() {
-	g_emailsTbl = make(map[uint32]Email)
+	f, err := os.OpenFile(
+		"kagimail.log",
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY,
+		0o644,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+	log.SetOutput(f)
+
+	g_emailFromUid = make(map[uint32]Email)
 
 	g_ui.app = tview.NewApplication()
 
 	g_ui.foldersPane = tview.NewList()
-	g_ui.emailsPane = tview.NewList()
+
+	g_ui.emailsList = tview.NewList()
+	g_ui.emailsStatusBar = tview.NewTextView()
+
 	g_ui.previewPane = tview.NewTextArea()
 	g_ui.statusBar = tview.NewTextView()
 
@@ -20,7 +38,7 @@ func main() {
 		SetBorder(true).
 		SetTitle("Folders")
 
-	g_ui.emailsPane.
+	g_ui.emailsList.
 		SetBorder(true).
 		SetTitle("Emails")
 
@@ -28,10 +46,23 @@ func main() {
 		SetBorder(true).
 		SetTitle("Preview")
 
+	g_ui.emailsStatusBar.
+		SetTextAlign(tview.AlignRight).
+		SetText("Downloading emails ").
+		// SetTextColor(tcell.ColorGray).
+		SetTextColor(tcell.NewHexColor(0xFFD369)).
+		SetBackgroundColor(tcell.NewHexColor(0x393E46))
+
+	g_ui.emailsPane = tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(g_ui.emailsList, 0, 10, true).
+		AddItem(g_ui.emailsStatusBar, 1, 0, false)
+
 	g_ui.columnsPane = tview.NewFlex().
 		SetDirection(tview.FlexColumn).
 		AddItem(g_ui.foldersPane, 0, 1, false).
-		AddItem(g_ui.emailsPane, 0, 4, false).AddItem(g_ui.previewPane, 0, 5, false)
+		AddItem(g_ui.emailsPane, 0, 4, false).
+		AddItem(g_ui.previewPane, 0, 5, false)
 
 	g_ui.mainPane = tview.NewFlex().
 		SetDirection(tview.FlexRow).
@@ -40,12 +71,12 @@ func main() {
 
 	g_ui.app.SetInputCapture(KeyHandler)
 	g_ui.app.SetRoot(g_ui.mainPane, true)
-	g_ui.app.SetFocus(g_ui.emailsPane)
+	g_ui.app.SetFocus(g_ui.emailsList)
 
 	go imapInit()
 	go smtpInit()
 
-	err := g_ui.app.Run()
+	err = g_ui.app.Run()
 	if err != nil {
 		panic(err)
 	}

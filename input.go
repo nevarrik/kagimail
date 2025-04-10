@@ -24,7 +24,7 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 		mode = QuickReplyMode
 	}
 
-	inEmailsOrPreview := pane == g_ui.emailsPane || pane == g_ui.previewPane
+	inEmailsOrPreview := pane == g_ui.emailsList || pane == g_ui.previewPane
 	if mode == PreviewMode && inEmailsOrPreview {
 		if (event.Key() == tcell.KeyRune && event.Rune() == 'r') ||
 			event.Key() == tcell.KeyCtrlR {
@@ -34,8 +34,8 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 			var reply strings.Builder
 
 			g_emailsMtx.Lock()
-			date := g_emailsTbl[g_ui.previewUid].date
-			author := g_emailsTbl[g_ui.previewUid].fromName
+			date := g_emailFromUid[g_ui.previewUid].date
+			author := g_emailFromUid[g_ui.previewUid].fromName
 			g_emailsMtx.Unlock()
 
 			userLocale, err := jibber_jabber.DetectLanguage()
@@ -73,7 +73,7 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 	if mode == QuickReplyMode && inEmailsOrPreview {
 		if event.Key() == tcell.KeyCtrlJ { // this is sent on ^enter
 			g_emailsMtx.Lock()
-			email := g_emailsTbl[g_ui.previewUid]
+			email := g_emailFromUid[g_ui.previewUid]
 			g_emailsMtx.Unlock()
 
 			email.body = g_ui.previewPane.GetText()
@@ -102,8 +102,8 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 
 	case tcell.KeyTab:
 		if pane == g_ui.foldersPane {
-			g_ui.app.SetFocus(g_ui.emailsPane)
-		} else if pane == g_ui.emailsPane {
+			g_ui.app.SetFocus(g_ui.emailsList)
+		} else if pane == g_ui.emailsList {
 			g_ui.app.SetFocus(g_ui.previewPane)
 		} else if pane == g_ui.previewPane {
 			g_ui.app.SetFocus(g_ui.foldersPane)
@@ -115,10 +115,10 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyBacktab:
 		if pane == g_ui.foldersPane {
 			g_ui.app.SetFocus(g_ui.previewPane)
-		} else if pane == g_ui.emailsPane {
+		} else if pane == g_ui.emailsList {
 			g_ui.app.SetFocus(g_ui.foldersPane)
 		} else if pane == g_ui.previewPane {
-			g_ui.app.SetFocus(g_ui.emailsPane)
+			g_ui.app.SetFocus(g_ui.emailsList)
 		} else {
 			AssertNotReachable("coming from a control we don't know about")
 		}
