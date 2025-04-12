@@ -8,6 +8,7 @@ import (
 
 func notifyFetchStarted(folder string, n int) {
 	g_ui.app.QueueUpdateDraw(func() {
+		g_ui.emailsFolderSelected = folder
 		g_ui.emailsFolderItemCount = n
 		g_ui.emailsStatusBar.SetText(fmt.Sprintf("retrieving %d emails from %s",
 			n, folder))
@@ -50,15 +51,16 @@ func insertImapEmailToList(email Email) {
 			return e1.date.After(e2.date)
 		}
 
+		folder := g_ui.emailsFolderSelected
 		// binary search and insert
 		g_emailsMtx.Lock()
-		i := sort.Search(len(g_emailsFromFolder), func(k int) bool {
-			return !fnDateCompare(g_emailsFromFolder[k], email)
+		i := sort.Search(len(g_emailsFromFolder[folder]), func(k int) bool {
+			return !fnDateCompare(g_emailsFromFolder[folder][k], email)
 		})
 
-		g_emailsFromFolder = append(g_emailsFromFolder, Email{})
-		copy(g_emailsFromFolder[i+1:], g_emailsFromFolder[i:])
-		g_emailsFromFolder[i] = email
+		g_emailsFromFolder[folder] = append(g_emailsFromFolder[folder], Email{})
+		copy(g_emailsFromFolder[folder][i+1:], g_emailsFromFolder[folder][i:])
+		g_emailsFromFolder[folder][i] = email
 		g_emailsMtx.Unlock()
 
 		// ui uses i to match g_emails order
@@ -67,12 +69,12 @@ func insertImapEmailToList(email Email) {
 			email.subject,
 			fmt.Sprintf(
 				"%s from: %s",
-				email.date.Format(time.RFC3339),
+				email.date.Format(time.Stamp),
 				email.fromAddress,
 			),
 			0,
 			func() {
-				go grabEmail(email.id)
+				go fetchEmailBody(email.id)
 			},
 		)
 	})
@@ -83,7 +85,7 @@ func insertFolderToList(mailbox string) {
 		g_ui.foldersPane.AddItem(mailbox, "", 0,
 			func() {
 				g_ui.emailsList.Clear()
-				grabLatestEmails(mailbox)
+				fetchFolderEmails(mailbox)
 			})
 	})
 }

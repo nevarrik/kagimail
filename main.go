@@ -21,12 +21,14 @@ func main() {
 	log.SetOutput(f)
 
 	g_emailFromUid = make(map[uint32]Email)
+	g_emailsFromFolder = make(map[string][]Email)
 
 	g_ui.app = tview.NewApplication()
 
 	g_ui.foldersPane = tview.NewList()
 
 	g_ui.emailsList = tview.NewList()
+	g_ui.emailsList.SetWrapAround(false)
 	g_ui.emailsStatusBar = tview.NewTextView()
 
 	g_ui.previewPane = tview.NewTextArea()

@@ -35,7 +35,7 @@ var (
 	g_ui     UI
 	g_config MailConfig
 
-	g_emails    []Email
-	g_emailsMtx                 sync.Mutex
-	g_emailFromUid              map[uint32]Email
+	g_emailsMtx        sync.Mutex
+	g_emailFromUid     map[uint32]Email
+	g_emailsFromFolder map[string][]Email
 )
