@@ -8,13 +8,13 @@ import (
 
 type UI struct {
 	app                        *tview.Application
-	foldersPane                *tview.List
+	foldersList                *tview.List
 	emailsList                 *tview.List
 	emailsStatusBar            *tview.TextView
 	emailsFolderSelected       string
 	emailsFolderItemCount      int
 	emailsFolderItemDownloaded int
-	previewPane                *tview.TextArea
+	previewText                *tview.TextArea
 	previewUid                 uint32
 	statusBar                  *tview.TextView
 

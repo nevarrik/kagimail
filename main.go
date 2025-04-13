@@ -25,16 +25,16 @@ func main() {
 
 	g_ui.app = tview.NewApplication()
 
-	g_ui.foldersPane = tview.NewList()
+	g_ui.foldersList = tview.NewList()
 
 	g_ui.emailsList = tview.NewList()
 	g_ui.emailsList.SetWrapAround(false)
 	g_ui.emailsStatusBar = tview.NewTextView()
 
-	g_ui.previewPane = tview.NewTextArea()
+	g_ui.previewText = tview.NewTextArea()
 	g_ui.statusBar = tview.NewTextView()
 
-	g_ui.foldersPane.
+	g_ui.foldersList.
 		SetHighlightFullLine(true).
 		ShowSecondaryText(false).
 		SetBorder(true).
@@ -44,7 +44,7 @@ func main() {
 		SetBorder(true).
 		SetTitle("Emails")
 
-	g_ui.previewPane.
+	g_ui.previewText.
 		SetBorder(true).
 		SetTitle("Preview")
 
@@ -62,9 +62,9 @@ func main() {
 
 	g_ui.columnsPane = tview.NewFlex().
 		SetDirection(tview.FlexColumn).
-		AddItem(g_ui.foldersPane, 0, 1, false).
+		AddItem(g_ui.foldersList, 0, 1, false).
 		AddItem(g_ui.emailsPane, 0, 4, false).
-		AddItem(g_ui.previewPane, 0, 5, false)
+		AddItem(g_ui.previewText, 0, 5, false)
 
 	g_ui.mainPane = tview.NewFlex().
 		SetDirection(tview.FlexRow).

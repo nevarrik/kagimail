@@ -8,6 +8,7 @@ import (
 
 func notifyFetchStarted(folder string, n int) {
 	g_ui.app.QueueUpdateDraw(func() {
+		g_ui.emailsList.Clear()
 		g_ui.emailsFolderSelected = folder
 		g_ui.emailsFolderItemCount = n
 		g_ui.emailsStatusBar.SetText(fmt.Sprintf("retrieving %d emails from %s",
@@ -18,8 +19,8 @@ func notifyFetchStarted(folder string, n int) {
 func previewPaneSetBody(id uint32, body string) {
 	g_ui.app.QueueUpdateDraw(func() {
 		g_ui.previewUid = id
-		g_ui.previewPane.SetTitle("Preview")
-		g_ui.previewPane.SetText(body, false)
+		g_ui.previewText.SetTitle("Preview")
+		g_ui.previewText.SetText(body, false)
 	})
 }
 
@@ -73,19 +74,18 @@ func insertImapEmailToList(email Email) {
 				email.fromAddress,
 			),
 			0,
-			func() {
-				go fetchEmailBody(email.id)
-			},
+			func() { go fetchEmailBody(folder, email.id) },
 		)
 	})
 }
 
 func insertFolderToList(mailbox string) {
 	g_ui.app.QueueUpdateDraw(func() {
-		g_ui.foldersPane.AddItem(mailbox, "", 0,
-			func() {
-				g_ui.emailsList.Clear()
-				fetchFolderEmails(mailbox)
-			})
+		if mailbox == "INBOX" {
+			mailbox = "Inbox"
+		}
+
+		g_ui.foldersList.AddItem(mailbox, "", 0,
+			func() { go fetchFolder(mailbox) })
 	})
 }

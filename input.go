@@ -18,19 +18,19 @@ const (
 func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 	pane := g_ui.app.GetFocus()
 	mode := 0
-	if g_ui.previewPane.GetTitle() == "Preview" {
+	if g_ui.previewText.GetTitle() == "Preview" {
 		mode = PreviewMode
-	} else if g_ui.previewPane.GetTitle() == "Quick Reply" {
+	} else if g_ui.previewText.GetTitle() == "Quick Reply" {
 		mode = QuickReplyMode
 	}
 
-	inEmailsOrPreview := pane == g_ui.emailsList || pane == g_ui.previewPane
+	inEmailsOrPreview := pane == g_ui.emailsList || pane == g_ui.previewText
 	if mode == PreviewMode && inEmailsOrPreview {
 		if (event.Key() == tcell.KeyRune && event.Rune() == 'r') ||
 			event.Key() == tcell.KeyCtrlR {
-			g_ui.previewPane.SetTitle("Quick Reply")
+			g_ui.previewText.SetTitle("Quick Reply")
 
-			originalText := g_ui.previewPane.GetText()
+			originalText := g_ui.previewText.GetText()
 			var reply strings.Builder
 
 			g_emailsMtx.Lock()
@@ -62,7 +62,7 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 				reply.WriteString(line + "\n")
 			}
 
-			g_ui.previewPane.SetText(reply.String(), false)
+			g_ui.previewText.SetText(reply.String(), false)
 			return nil
 		}
 
@@ -76,7 +76,7 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 			email := g_emailFromUid[g_ui.previewUid]
 			g_emailsMtx.Unlock()
 
-			email.body = g_ui.previewPane.GetText()
+			email.body = g_ui.previewText.GetText()
 			email.toAddress = email.fromAddress
 			email.fromAddress = g_config.Email
 			email.fromName = g_config.DisplayName
@@ -101,23 +101,23 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 
 	case tcell.KeyTab:
-		if pane == g_ui.foldersPane {
+		if pane == g_ui.foldersList {
 			g_ui.app.SetFocus(g_ui.emailsList)
 		} else if pane == g_ui.emailsList {
-			g_ui.app.SetFocus(g_ui.previewPane)
-		} else if pane == g_ui.previewPane {
-			g_ui.app.SetFocus(g_ui.foldersPane)
+			g_ui.app.SetFocus(g_ui.previewText)
+		} else if pane == g_ui.previewText {
+			g_ui.app.SetFocus(g_ui.foldersList)
 		} else {
 			AssertNotReachable("coming from a control we don't know about")
 		}
 		return nil
 
 	case tcell.KeyBacktab:
-		if pane == g_ui.foldersPane {
-			g_ui.app.SetFocus(g_ui.previewPane)
+		if pane == g_ui.foldersList {
+			g_ui.app.SetFocus(g_ui.previewText)
 		} else if pane == g_ui.emailsList {
-			g_ui.app.SetFocus(g_ui.foldersPane)
-		} else if pane == g_ui.previewPane {
+			g_ui.app.SetFocus(g_ui.foldersList)
+		} else if pane == g_ui.previewText {
 			g_ui.app.SetFocus(g_ui.emailsList)
 		} else {
 			AssertNotReachable("coming from a control we don't know about")
@@ -125,6 +125,5 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 
-	updateStatusBar("key: " + event.Name())
 	return event
 }
