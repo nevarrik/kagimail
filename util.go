@@ -24,5 +24,5 @@ func Require(condition bool, msg string) {
 func IsOnUiThread() bool {
 	buf := make([]byte, 64)
 	runtime.Stack(buf, false)
-	return strings.HasPrefix(string(buf), "goroutine 1")
+	return strings.HasPrefix(string(buf), "goroutine 1 ")
 }
