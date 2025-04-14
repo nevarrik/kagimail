@@ -10,11 +10,10 @@ type UI struct {
 	app         *tview.Application
 	foldersList *tview.List
 
-	emailsList                 *tview.List
-	emailsStatusBar            *tview.TextView
-	emailsFolderSelected       string
-	emailsFolderItemCount      int
-	emailsFolderItemDownloaded int
+	emailsList            *tview.List
+	emailsStatusBar       *tview.TextView
+	emailsFolderSelected  string
+	emailsFolderItemCount int
 	// we set this when we begin downloading all emails from a folder, to keep
 	// the first element selected until they manually change the selection
 	emailsPegSelectionToTop bool

@@ -240,15 +240,19 @@ func imapWorker() {
 			chAllDone <- handleEmails(chEmails, handleImapEmail)
 		}
 
+		emailCountAfter := int(mailbox.Messages)
 		if flags&fetchAllEmailsInFolder != 0 {
-			notifyFetchStarted(folder, int(mailbox.Messages))
-			fetchMultipleEmails(0, int(mailbox.Messages))
+			notifyFetchAllStarted(folder, emailCountAfter)
+			fetchMultipleEmails(0, emailCountAfter)
 		} else if flags&fetchLatestEmails != 0 {
 			g_emailsMtx.Lock()
-			mailCountBefore := len(g_emailsFromFolder[folder])
+			emailCountBefore := len(g_emailsFromFolder[folder])
 			g_emailsMtx.Unlock()
 
-			fetchMultipleEmails(mailCountBefore, int(mailbox.Messages))
+			if emailCountBefore < emailCountAfter {
+				notifyFetchLatestStarted(folder, emailCountAfter)
+				fetchMultipleEmails(emailCountBefore, emailCountAfter)
+			}
 		} else if flags&fetchSingleEmailViaSeq != 0 {
 			fetchSingleEmail(
 				uid /* treat as seq */, []imap.FetchItem{
