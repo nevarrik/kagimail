@@ -7,17 +7,22 @@ import (
 )
 
 type UI struct {
-	app                        *tview.Application
-	foldersList                *tview.List
+	app         *tview.Application
+	foldersList *tview.List
+
 	emailsList                 *tview.List
 	emailsStatusBar            *tview.TextView
 	emailsFolderSelected       string
 	emailsFolderItemCount      int
 	emailsFolderItemDownloaded int
-	previewText                *tview.TextArea
-	previewUid                 uint32
-	statusBar                  *tview.TextView
+	// we set this when we begin downloading all emails from a folder, to keep
+	// the first element selected until they manually change the selection
+	emailsPegSelectionToTop bool
 
+	previewText *tview.TextArea
+	previewUid  uint32
+
+	statusBar   *tview.TextView
 	columnsPane *tview.Flex
 	mainPane    *tview.Flex
 	emailsPane  *tview.Flex

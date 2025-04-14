@@ -11,8 +11,8 @@ func notifyFetchStarted(folder string, n int) {
 		g_ui.emailsList.Clear()
 		g_ui.emailsFolderSelected = folder
 		g_ui.emailsFolderItemCount = n
-		g_ui.emailsStatusBar.SetText(fmt.Sprintf("retrieving %d emails from %s",
-			n, folder))
+		g_ui.emailsPegSelectionToTop = true
+		updateStatusBar(fmt.Sprintf("retrieving %d emails from %s", n, folder))
 	})
 }
 
@@ -76,6 +76,10 @@ func insertImapEmailToList(email Email) {
 			0,
 			func() { go fetchEmailBody(folder, email.id) },
 		)
+
+		if g_ui.emailsPegSelectionToTop {
+			g_ui.emailsList.SetCurrentItem(0)
+		}
 	})
 }
 

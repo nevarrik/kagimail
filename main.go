@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -29,6 +30,12 @@ func main() {
 
 	g_ui.emailsList = tview.NewList()
 	g_ui.emailsList.SetWrapAround(false)
+	g_ui.emailsList.SetChangedFunc(
+		func(index int, mainText string, subText string, shortcut rune) {
+			g_ui.emailsStatusBar.SetText(fmt.Sprintf(
+				"Email %d of %d", index+1, g_ui.emailsFolderItemCount))
+		},
+	)
 	g_ui.emailsStatusBar = tview.NewTextView()
 
 	g_ui.previewText = tview.NewTextArea()
@@ -51,7 +58,6 @@ func main() {
 	g_ui.emailsStatusBar.
 		SetTextAlign(tview.AlignRight).
 		SetText("Downloading emails ").
-		// SetTextColor(tcell.ColorGray).
 		SetTextColor(tcell.NewHexColor(0xFFD369)).
 		SetBackgroundColor(tcell.NewHexColor(0x393E46))
 

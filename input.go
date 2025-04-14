@@ -91,6 +91,19 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 		}
 	}
 
+	if pane == g_ui.emailsList {
+		switch event.Key() {
+		case tcell.KeyUp,
+			tcell.KeyDown,
+			tcell.KeyHome,
+			tcell.KeyEnd,
+			tcell.KeyPgUp,
+			tcell.KeyPgDn,
+			tcell.KeyEnter:
+			g_ui.emailsPegSelectionToTop = false
+		}
+	}
+
 	switch event.Key() {
 	case tcell.KeyEscape:
 		fallthrough
