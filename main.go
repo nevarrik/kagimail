@@ -20,8 +20,7 @@ func main() {
 	defer f.Close()
 	log.SetOutput(f)
 
-	g_emailFromUid = make(map[string]map[uint32]*Email)
-	g_emailsFromFolder = make(map[string][]*Email)
+	modelInit()
 
 	g_ui.app = tview.NewApplication()
 

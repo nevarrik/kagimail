@@ -1,8 +1,6 @@
 package main
 
 import (
-	"sync"
-
 	"github.com/rivo/tview"
 )
 
@@ -39,8 +37,4 @@ type MailConfig struct {
 var (
 	g_ui     UI
 	g_config MailConfig
-
-	g_emailsMu         sync.Mutex
-	g_emailFromUid     map[string]map[uint32]*Email
-	g_emailsFromFolder map[string][]*Email
 )

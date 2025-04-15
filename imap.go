@@ -239,10 +239,7 @@ func imapWorker() {
 			notifyFetchAllStarted(folder, emailCountAfter)
 			fetchMultipleEmails(0, emailCountAfter)
 		} else if flags&fetchLatestEmails != 0 {
-			g_emailsMu.Lock()
-			emailCountBefore := len(g_emailsFromFolder[folder])
-			g_emailsMu.Unlock()
-
+			emailCountBefore := cachedEmailFromFolderItemCount()
 			if emailCountBefore < emailCountAfter {
 				notifyFetchLatestStarted(folder, emailCountAfter)
 				fetchMultipleEmails(emailCountBefore, emailCountAfter)
@@ -298,10 +295,7 @@ func imapWorker() {
 			switch update.(type) {
 			case *client.MailboxUpdate:
 				folder := g_ui.folderSelected
-				g_emailsMu.Lock()
-				mailCountBefore := len(g_emailsFromFolder[folder])
-				g_emailsMu.Unlock()
-
+				mailCountBefore := cachedEmailFromFolderItemCount(folder)
 				mailboxUpdate := update.(*client.MailboxUpdate)
 				if int(mailboxUpdate.Mailbox.Messages) <= mailCountBefore {
 					continue

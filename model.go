@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 )
 
@@ -15,6 +16,17 @@ type Email struct {
 	fromName    string
 	body        string
 	size        uint64
+}
+
+var (
+	g_emailsMu         sync.Mutex
+	g_emailFromUid     map[string]map[uint32]*Email
+	g_emailsFromFolder map[string][]*Email
+)
+
+func modelInit() {
+	g_emailFromUid = make(map[string]map[uint32]*Email)
+	g_emailsFromFolder = make(map[string][]*Email)
 }
 
 func cachedEmailByFolderBinarySearch(folder string, email Email) int {
@@ -93,4 +105,10 @@ func cachedEmailEnvelopeSet(folder string, email *Email) {
 	emailsByFolder[email.id] = email
 	cachedEmailByFolderInsertLocked(folder, email)
 	g_emailsMu.Unlock()
+}
+
+func cachedEmailFromFolderItemCount(folder string) int {
+	g_emailsMu.Lock()
+	defer g_emailsMu.Unlock()
+	return len(g_emailsFromFolder[folder])
 }
