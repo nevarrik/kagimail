@@ -20,8 +20,8 @@ func main() {
 	defer f.Close()
 	log.SetOutput(f)
 
-	g_emailFromUid = make(map[uint32]Email)
-	g_emailsFromFolder = make(map[string][]Email)
+	g_emailFromUid = make(map[string]map[uint32]*Email)
+	g_emailsFromFolder = make(map[string][]*Email)
 
 	g_ui.app = tview.NewApplication()
 
@@ -31,6 +31,9 @@ func main() {
 	g_ui.emailsList.SetWrapAround(false)
 	g_ui.emailsList.SetChangedFunc(
 		func(int, string, string, rune) { updateEmailStatusBar() })
+	g_ui.emailsList.SetSelectedFunc(func(k int, _ string, _ string, _ rune) {
+		go fetchEmailBody(g_ui.folderSelected, g_ui.emailsUidList[k])
+	})
 	g_ui.emailsStatusBar = tview.NewTextView()
 
 	g_ui.previewText = tview.NewTextArea()

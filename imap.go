@@ -7,23 +7,12 @@ import (
 	"io"
 	"log"
 	"strings"
-	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/client"
 	"github.com/emersion/go-message/mail"
 )
-
-type Email struct {
-	id          uint32
-	subject     string
-	date        time.Time
-	toAddress   string
-	fromAddress string
-	fromName    string
-	body        string
-}
 
 type FetchFolderRequest struct {
 	folder string
@@ -47,13 +36,17 @@ var (
 )
 
 func fetchEmailBody(folder string, uid uint32) {
-	done := make(chan error, 1)
-	chFetchEmailBody <- FetchEmailBodyRequest{folder, uid, done}
-	err := <-done
-	if err != nil {
-		updateStatusBar(fmt.Sprintf(
-			"Unable to download email body for id %d: %v", uid, err))
+	var err error = nil
+	var flags uint = 0
+	if cachedEmailFromUid(folder, uid).body == "" {
+		notifyFetchEmailBodyStarted(folder, uid)
+		done := make(chan error, 1)
+		chFetchEmailBody <- FetchEmailBodyRequest{folder, uid, done}
+		err = <-done
+	} else {
+		flags |= notifyFetchEmailPulledFromCache
 	}
+	notifyFetchEmailBodyFinished(err, folder, uid, flags)
 }
 
 func fetchFolder(folder string) {
@@ -141,8 +134,9 @@ func imapWorker() {
 	)
 
 	handleEmails := func(
+		folder string,
 		chEmails chan *imap.Message,
-		handleImapEmail func(*imap.Message) error,
+		handleImapEmail func(string, *imap.Message) error,
 	) error {
 	fetchLoop:
 		// read from channel and use handleImapEmail handler
@@ -153,7 +147,7 @@ func imapWorker() {
 					break fetchLoop
 				}
 
-				err := handleImapEmail(imapEmail)
+				err := handleImapEmail(folder, imapEmail)
 				if err != nil {
 					return err
 				}
@@ -166,9 +160,9 @@ func imapWorker() {
 	fetchEmail := func(
 		uid uint32,
 		folder string,
-		handleImapEmail func(*imap.Message) error,
+		handleImapEmail func(string, *imap.Message) error,
 		chAllDone chan error,
-		flags uint32,
+		flags uint,
 	) {
 		mailbox, err := clt.Select(folder, true)
 		if err != nil {
@@ -194,7 +188,7 @@ func imapWorker() {
 					}, chEmails)
 				}()
 
-				err := handleEmails(chEmails, handleImapEmail)
+				err := handleEmails(folder, chEmails, handleImapEmail)
 				if err != nil {
 					chAllDone <- err
 					break
@@ -237,7 +231,7 @@ func imapWorker() {
 				}
 			}()
 
-			chAllDone <- handleEmails(chEmails, handleImapEmail)
+			chAllDone <- handleEmails(folder, chEmails, handleImapEmail)
 		}
 
 		emailCountAfter := int(mailbox.Messages)
@@ -245,9 +239,9 @@ func imapWorker() {
 			notifyFetchAllStarted(folder, emailCountAfter)
 			fetchMultipleEmails(0, emailCountAfter)
 		} else if flags&fetchLatestEmails != 0 {
-			g_emailsMtx.Lock()
+			g_emailsMu.Lock()
 			emailCountBefore := len(g_emailsFromFolder[folder])
-			g_emailsMtx.Unlock()
+			g_emailsMu.Unlock()
 
 			if emailCountBefore < emailCountAfter {
 				notifyFetchLatestStarted(folder, emailCountAfter)
@@ -303,10 +297,10 @@ func imapWorker() {
 		case update := <-chImapUpdates:
 			switch update.(type) {
 			case *client.MailboxUpdate:
-				folder := g_ui.emailsFolderSelected
-				g_emailsMtx.Lock()
+				folder := g_ui.folderSelected
+				g_emailsMu.Lock()
 				mailCountBefore := len(g_emailsFromFolder[folder])
-				g_emailsMtx.Unlock()
+				g_emailsMu.Unlock()
 
 				mailboxUpdate := update.(*client.MailboxUpdate)
 				if int(mailboxUpdate.Mailbox.Messages) <= mailCountBefore {
@@ -323,7 +317,7 @@ func imapWorker() {
 
 			case *client.MessageUpdate:
 				messageUpdate := update.(*client.MessageUpdate)
-				folder := g_ui.emailsFolderSelected
+				folder := g_ui.folderSelected
 				seqNum := messageUpdate.Message.SeqNum
 				done := make(chan error)
 				fetchEmail(
@@ -339,7 +333,7 @@ func imapWorker() {
 	}
 }
 
-func updateEmailBody(imapEmail *imap.Message) error {
+func updateEmailBody(folder string, imapEmail *imap.Message) error {
 	Require(imapEmail.Uid != 0, "requires uid")
 	section := &imap.BodySectionName{
 		Peek: false,
@@ -352,15 +346,6 @@ func updateEmailBody(imapEmail *imap.Message) error {
 	n, err := io.Copy(&buf, reader)
 	if err != nil {
 		return errors.New(fmt.Sprintf("unable to copy email buffer: %v", err))
-	}
-
-	humanReadableSize := func(bytes int64) string {
-		units := []string{"b", "kb", "mb", "gb", "tb", "pb"}
-		size, unit := float64(bytes), 0
-		for size >= 1024 && unit < len(units)-1 {
-			size, unit = size/1024, unit+1
-		}
-		return fmt.Sprintf("%.1f %s", size, units[unit])
 	}
 
 	mailReader, err := mail.CreateReader(bytes.NewReader(buf.Bytes()))
@@ -390,24 +375,11 @@ func updateEmailBody(imapEmail *imap.Message) error {
 		}
 	}
 
-	previewPaneSetBody(imapEmail.Uid, plainText)
-	updateStatusBar(
-		fmt.Sprintf("downloaded email message: %d, size of %s",
-			imapEmail.Uid, humanReadableSize(n)))
-
-	if plainText == "" {
-		g_ui.app.QueueUpdateDraw(func() {
-			g_ui.previewText.SetText(fmt.Sprintf(
-				"no plaintext found, size was: %s",
-				humanReadableSize(n),
-			), false)
-		})
-	}
-
+	cachedEmailBodyUpdate(folder, imapEmail.Uid, plainText, n)
 	return nil
 }
 
-func appendImapEmailToUI(imapEmail *imap.Message) error {
+func appendImapEmailToUI(folder string, imapEmail *imap.Message) error {
 	email := Email{
 		imapEmail.Uid,
 		imapEmail.Envelope.Subject,
@@ -416,6 +388,7 @@ func appendImapEmailToUI(imapEmail *imap.Message) error {
 		"",
 		"",
 		"",
+		0,
 	}
 
 	if len(imapEmail.Envelope.To) > 0 {
@@ -427,10 +400,7 @@ func appendImapEmailToUI(imapEmail *imap.Message) error {
 		email.fromName = imapEmail.Envelope.From[0].PersonalName
 	}
 
-	g_emailsMtx.Lock()
-	g_emailFromUid[email.id] = email
-	g_emailsMtx.Unlock()
-
+	cachedEmailEnvelopeSet(folder, &email)
 	insertImapEmailToList(email)
 	return nil
 }

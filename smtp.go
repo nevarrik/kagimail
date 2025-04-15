@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"gopkg.in/mail.v2"
 )
@@ -31,13 +32,27 @@ func smtpWorker() {
 				g_config.Email, g_config.Password)
 			err := dialer.DialAndSend(msg)
 			if err != nil {
-				updateStatusBar(fmt.Sprintf("couldn't send email: %v", err))
+				updateStatusBar(fmt.Sprintf("Couldn't send email: %v", err))
 				break
 			}
 
-			updateStatusBar(fmt.Sprintf("email sent to: %s", email.toAddress))
+			updateStatusBar(fmt.Sprintf("Email sent to: %s", email.toAddress))
 		}
 	}
+}
+
+func replyEmail(emailOriginal Email, body string) {
+	email_ := emailOriginal
+	email_.body = body
+	email_.toAddress = emailOriginal.fromAddress
+	email_.fromAddress = g_config.Email
+	email_.fromName = g_config.DisplayName
+	subject := strings.TrimSpace(email_.subject)
+	if !strings.HasPrefix(strings.ToLower(subject), "re:") {
+		subject = "Re: " + subject
+	}
+	email_.subject = subject
+	sendEmail(email_)
 }
 
 func sendEmail(email Email) {

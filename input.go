@@ -1,12 +1,7 @@
 package main
 
 import (
-	"fmt"
-	"strings"
-
-	"github.com/cloudfoundry/jibber_jabber"
 	"github.com/gdamore/tcell/v2"
-	"github.com/goodsign/monday"
 )
 
 const (
@@ -28,41 +23,7 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 	if mode == PreviewMode && inEmailsOrPreview {
 		if (event.Key() == tcell.KeyRune && event.Rune() == 'r') ||
 			event.Key() == tcell.KeyCtrlR {
-			g_ui.previewText.SetTitle("Quick Reply")
-
-			originalText := g_ui.previewText.GetText()
-			var reply strings.Builder
-
-			g_emailsMtx.Lock()
-			date := g_emailFromUid[g_ui.previewUid].date
-			author := g_emailFromUid[g_ui.previewUid].fromName
-			g_emailsMtx.Unlock()
-
-			userLocale, err := jibber_jabber.DetectLanguage()
-			if err != nil {
-				userLocale = "en_US"
-			}
-
-			locale := monday.Locale(userLocale)
-			longDateFormat, ok := monday.FullFormatsByLocale[locale]
-			if !ok {
-				longDateFormat = monday.DefaultFormatEnUSFull
-			}
-
-			longTimeFormat, ok := monday.TimeFormatsByLocale[locale]
-			if !ok {
-				longTimeFormat = monday.DefaultFormatEnUSTime
-			}
-
-			reply.WriteString(fmt.Sprintf("On %s %s wrote:\n",
-				monday.Format(date, longDateFormat+" "+longTimeFormat, locale), author))
-
-			for _, line := range strings.Split(originalText, "\n") {
-				line = ">" + line
-				reply.WriteString(line + "\n")
-			}
-
-			g_ui.previewText.SetText(reply.String(), false)
+			previewPaneSetReply()
 			return nil
 		}
 
@@ -72,21 +33,10 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 
 	if mode == QuickReplyMode && inEmailsOrPreview {
 		if event.Key() == tcell.KeyCtrlJ { // this is sent on ^enter
-			g_emailsMtx.Lock()
-			email := g_emailFromUid[g_ui.previewUid]
-			g_emailsMtx.Unlock()
+			email := cachedEmailFromUid(
+				g_ui.folderSelected, g_ui.previewUid)
+			replyEmail(email, g_ui.previewText.GetText())
 
-			email.body = g_ui.previewText.GetText()
-			email.toAddress = email.fromAddress
-			email.fromAddress = g_config.Email
-			email.fromName = g_config.DisplayName
-			subject := strings.TrimSpace(email.subject)
-			if !strings.HasPrefix(strings.ToLower(subject), "re:") {
-				subject = "Re: " + subject
-			}
-			email.subject = subject
-
-			sendEmail(email)
 			return nil
 		}
 	}

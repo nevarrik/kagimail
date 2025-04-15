@@ -2,25 +2,62 @@ package main
 
 import (
 	"fmt"
-	"sort"
+	"strings"
 	"time"
+
+	"github.com/cloudfoundry/jibber_jabber"
+	"github.com/goodsign/monday"
 )
 
 func notifyFetchAllStarted(folder string, n int) {
 	g_ui.app.QueueUpdateDraw(func() {
 		g_ui.emailsList.Clear()
-		g_ui.emailsFolderSelected = folder
-		g_ui.emailsFolderItemCount = n
+		g_ui.folderSelected = folder
+		g_ui.folderItemCount = n
 		g_ui.emailsPegSelectionToTop = true
-		updateStatusBar(fmt.Sprintf("retrieving %d emails from %s", n, folder))
+		updateStatusBar(fmt.Sprintf("Retrieving %d emails from %s", n, folder))
 	})
 }
 
 func notifyFetchLatestStarted(folder string, n int) {
 	g_ui.app.QueueUpdateDraw(func() {
-		g_ui.emailsFolderItemCount = n
-		updateStatusBar(fmt.Sprintf("retrieving latest emails from %s", folder))
+		g_ui.folderItemCount = n
+		updateStatusBar(fmt.Sprintf("Retrieving latest emails from %s", folder))
 	})
+}
+
+func notifyFetchEmailBodyStarted(folder string, uid uint32) {
+	updateStatusBar(fmt.Sprintf(
+		"Downloading email id: %d from %s", uid, folder))
+}
+
+const (
+	notifyFetchEmailPulledFromCache = 1 << iota
+)
+
+func notifyFetchEmailBodyFinished(
+	err error, folder string, uid uint32, flags uint,
+) {
+	if err != nil {
+		updateStatusBar(fmt.Sprintf(
+			"Unable to download email body for id %d: %v", uid, err))
+	}
+
+	email := cachedEmailFromUid(folder, uid)
+	size := FormatHumanReadableSize(int64(email.size))
+	var s string
+	if flags&notifyFetchEmailPulledFromCache != 0 {
+		s = fmt.Sprintf("Found cached email message: %d, size of %s", uid, size)
+	} else {
+		s = fmt.Sprintf("Downloaded email message: %d, size of %s", uid, size)
+	}
+	updateStatusBar(s)
+
+	body := email.body
+	if body == "" {
+		body = fmt.Sprintf("No plaintext found, size was: %s", size)
+	}
+	previewPaneSetBody(uid, body)
 }
 
 func previewPaneSetBody(id uint32, body string) {
@@ -31,11 +68,59 @@ func previewPaneSetBody(id uint32, body string) {
 	})
 }
 
+func previewPaneSetReply() {
+	g_ui.previewText.SetTitle("Quick Reply")
+
+	originalText := g_ui.previewText.GetText()
+	var reply strings.Builder
+
+	userLocale, err := jibber_jabber.DetectLanguage()
+	if err != nil {
+		userLocale = "en_US"
+	}
+
+	locale := monday.Locale(userLocale)
+	longDateFormat, ok := monday.FullFormatsByLocale[locale]
+	if !ok {
+		longDateFormat = monday.DefaultFormatEnUSFull
+	}
+
+	longTimeFormat, ok := monday.TimeFormatsByLocale[locale]
+	if !ok {
+		longTimeFormat = monday.DefaultFormatEnUSTime
+	}
+
+	email := cachedEmailFromUid(
+		g_ui.folderSelected,
+		g_ui.previewUid,
+	)
+	reply.WriteString(
+		fmt.Sprintf(
+			"On %s %s wrote:\n",
+			monday.Format(
+				email.date,
+				longDateFormat+" "+longTimeFormat,
+				locale,
+			),
+			email.fromName,
+		),
+	)
+
+	for _, line := range strings.Split(originalText, "\n") {
+		line = ">" + line
+		reply.WriteString(line + "\n")
+	}
+
+	g_ui.previewText.SetText(reply.String(), false)
+}
+
 func updateEmailStatusBar() {
+	k := g_ui.emailsList.GetCurrentItem()
 	g_ui.emailsStatusBar.SetText(fmt.Sprintf(
-		"Email %d of %d (ItemCount=%d)",
-		g_ui.emailsList.GetCurrentItem()+1,
-		g_ui.emailsFolderItemCount,
+		"Email %d of %d [%d] (ItemCount=%d)",
+		k+1,
+		g_ui.folderItemCount,
+		g_ui.emailsUidList[k],
 		g_ui.emailsList.GetItemCount(),
 	))
 }
@@ -50,62 +135,38 @@ func updateStatusBar(text string) {
 
 func insertImapEmailToList(email Email) {
 	g_ui.app.QueueUpdateDraw(func() {
-		fnDateCompare := func(e1 Email, e2 Email) bool {
-			if e1.date == e2.date {
-				return e1.id > e2.id
-			}
-			return e1.date.After(e2.date)
+		folder := g_ui.folderSelected
+		i := cachedEmailByFolderBinarySearch(folder, email)
+		if i < len(g_ui.emailsUidList) && g_ui.emailsUidList[i] == email.id {
+			return // already added
 		}
 
-		// binary search and insert
-		var i int
-		folder := g_ui.emailsFolderSelected
-		{
-			g_emailsMtx.Lock()
-			defer g_emailsMtx.Unlock()
-			i = sort.Search(len(g_emailsFromFolder[folder]), func(k int) bool {
-				return !fnDateCompare(g_emailsFromFolder[folder][k], email)
-			})
-
-			if i < len(g_emailsFromFolder[folder]) &&
-				g_emailsFromFolder[folder][i].id == email.id {
-				return
-			}
-
-			g_emailsFromFolder[folder] = append(
-				g_emailsFromFolder[folder],
-				Email{},
-			)
-			copy(
-				g_emailsFromFolder[folder][i+1:],
-				g_emailsFromFolder[folder][i:],
-			)
-			g_emailsFromFolder[folder][i] = email
-		}
-
-		// ui uses i to match g_emails order
+		// insert into emailsUidList
+		g_ui.emailsUidList = append(g_ui.emailsUidList, 0)
+		copy(g_ui.emailsUidList[i+1:], g_ui.emailsUidList[i:])
+		g_ui.emailsUidList[i] = email.id
+		// insert into ui
+		secondaryLine := fmt.Sprintf("%s from: %s",
+			email.date.Format(time.Stamp), email.fromAddress)
 		g_ui.emailsList.InsertItem(
-			i,
-			email.subject,
-			fmt.Sprintf(
-				"%s from: %s",
-				email.date.Format(time.Stamp),
-				email.fromAddress,
-			),
-			0,
-			func() { go fetchEmailBody(folder, email.id) },
-		)
+			i, email.subject, secondaryLine, 0, nil)
 
+		Assert(len(g_ui.emailsUidList) == g_ui.emailsList.GetItemCount(), "")
+
+		// when initially loading before keyboard input, keep top item selected
+		// (items might not be inserted into ui in correct order, but our first
+		// insert will set the selected item--which might then move down
 		if g_ui.emailsPegSelectionToTop {
 			g_ui.emailsList.SetCurrentItem(0)
 		}
 
-		if g_ui.emailsList.GetItemCount() == g_ui.emailsFolderItemCount {
+		// update statusbar
+		if g_ui.emailsList.GetItemCount() == g_ui.folderItemCount {
 			g_ui.emailsStatusBar.SetText(fmt.Sprintf(
-				"folder up to date with %d emails", g_ui.emailsFolderItemCount))
+				"Folder up to date with %d emails", g_ui.folderItemCount))
 		} else {
 			g_ui.emailsStatusBar.SetText(
-				fmt.Sprintf("downloading %d emails", g_ui.emailsFolderItemCount-g_ui.emailsList.GetItemCount()))
+				fmt.Sprintf("Downloading %d emails", g_ui.folderItemCount-g_ui.emailsList.GetItemCount()))
 		}
 	})
 }

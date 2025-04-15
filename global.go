@@ -10,10 +10,11 @@ type UI struct {
 	app         *tview.Application
 	foldersList *tview.List
 
-	emailsList            *tview.List
-	emailsStatusBar       *tview.TextView
-	emailsFolderSelected  string
-	emailsFolderItemCount int
+	emailsList      *tview.List
+	emailsUidList   []uint32
+	emailsStatusBar *tview.TextView
+	folderSelected  string
+	folderItemCount int
 	// we set this when we begin downloading all emails from a folder, to keep
 	// the first element selected until they manually change the selection
 	emailsPegSelectionToTop bool
@@ -39,7 +40,7 @@ var (
 	g_ui     UI
 	g_config MailConfig
 
-	g_emailsMtx        sync.Mutex
-	g_emailFromUid     map[uint32]Email
-	g_emailsFromFolder map[string][]Email
+	g_emailsMu         sync.Mutex
+	g_emailFromUid     map[string]map[uint32]*Email
+	g_emailsFromFolder map[string][]*Email
 )
