@@ -9,6 +9,7 @@ import (
 
 type Email struct {
 	id          uint32
+	folder      string
 	subject     string
 	date        time.Time
 	toAddress   string
@@ -29,14 +30,16 @@ func modelInit() {
 	g_emailsFromFolder = make(map[string][]*Email)
 }
 
-func cachedEmailByFolderBinarySearch(folder string, email Email) int {
+func cachedEmailByFolderBinarySearch(email Email) int {
 	g_emailsMu.Lock()
 	defer g_emailsMu.Unlock()
-	return cachedEmailByFolderBinarySearchLocked(folder, email)
+	return cachedEmailByFolderBinarySearchLocked(email)
 }
 
-func cachedEmailByFolderBinarySearchLocked(folder string, email Email) int {
+func cachedEmailByFolderBinarySearchLocked(email Email) int {
 	Assert(g_emailsMu.TryLock() == false, "g_emailsMu needs to be locked")
+	Require(email.id != 0, "email.id required")
+	Require(email.folder != "", "email.folder required")
 
 	fnDateCompare := func(e1 Email, e2 Email) bool {
 		if e1.date == e2.date {
@@ -45,14 +48,18 @@ func cachedEmailByFolderBinarySearchLocked(folder string, email Email) int {
 		return e1.date.After(e2.date)
 	}
 
+	folder := email.folder
 	return sort.Search(len(g_emailsFromFolder[folder]), func(k int) bool {
 		return !fnDateCompare(*g_emailsFromFolder[folder][k], email)
 	})
 }
 
-func cachedEmailByFolderInsertLocked(folder string, email *Email) (int, bool) {
+func cachedEmailByFolderInsertLocked(email *Email) (int, bool) {
 	Assert(g_emailsMu.TryLock() == false, "g_emailsMu needs to be locked")
-	i := cachedEmailByFolderBinarySearchLocked(folder, *email)
+	Require(email.id != 0, "email.id required")
+	Require(email.folder != "", "email.folder required")
+	folder := email.folder
+	i := cachedEmailByFolderBinarySearchLocked(*email)
 	if i < len(g_emailsFromFolder[folder]) &&
 		g_emailsFromFolder[folder][i].id == email.id {
 		return i, true
@@ -77,7 +84,7 @@ func cachedEmailBodyUpdate(folder string, uid uint32, body string, size int64) {
 	Assert(ok, "we needed a valid envelope first before setting body")
 	email.body = body
 	email.size = uint64(size)
-	i := cachedEmailByFolderBinarySearchLocked(folder, *email)
+	i := cachedEmailByFolderBinarySearchLocked(*email)
 
 	e1 := g_emailsFromFolder[folder][i]
 	e2 := g_emailFromUid[folder][uid]
@@ -94,8 +101,10 @@ func cachedEmailFromUid(folder string, uid uint32) Email {
 	return *g_emailFromUid[folder][uid]
 }
 
-func cachedEmailEnvelopeSet(folder string, email *Email) {
+func cachedEmailEnvelopeSet(email *Email) {
 	Require(email.id != 0, "email.id required")
+	Require(email.folder != "", "email.folder required")
+	folder := email.folder
 	g_emailsMu.Lock()
 	emailsByFolder, ok := g_emailFromUid[folder]
 	if !ok {
@@ -103,7 +112,7 @@ func cachedEmailEnvelopeSet(folder string, email *Email) {
 		g_emailFromUid[folder] = emailsByFolder
 	}
 	emailsByFolder[email.id] = email
-	cachedEmailByFolderInsertLocked(folder, email)
+	cachedEmailByFolderInsertLocked(email)
 	g_emailsMu.Unlock()
 }
 

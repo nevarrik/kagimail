@@ -135,8 +135,7 @@ func updateStatusBar(text string) {
 
 func insertImapEmailToList(email Email) {
 	g_ui.app.QueueUpdateDraw(func() {
-		folder := g_ui.folderSelected
-		i := cachedEmailByFolderBinarySearch(folder, email)
+		i := cachedEmailByFolderBinarySearch(email)
 		if i < len(g_ui.emailsUidList) && g_ui.emailsUidList[i] == email.id {
 			return // already added
 		}

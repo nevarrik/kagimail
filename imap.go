@@ -239,7 +239,7 @@ func imapWorker() {
 			notifyFetchAllStarted(folder, emailCountAfter)
 			fetchMultipleEmails(0, emailCountAfter)
 		} else if flags&fetchLatestEmails != 0 {
-			emailCountBefore := cachedEmailFromFolderItemCount()
+			emailCountBefore := cachedEmailFromFolderItemCount(folder)
 			if emailCountBefore < emailCountAfter {
 				notifyFetchLatestStarted(folder, emailCountAfter)
 				fetchMultipleEmails(emailCountBefore, emailCountAfter)
@@ -376,6 +376,7 @@ func updateEmailBody(folder string, imapEmail *imap.Message) error {
 func appendImapEmailToUI(folder string, imapEmail *imap.Message) error {
 	email := Email{
 		imapEmail.Uid,
+		folder,
 		imapEmail.Envelope.Subject,
 		imapEmail.Envelope.Date,
 		"",
@@ -394,7 +395,7 @@ func appendImapEmailToUI(folder string, imapEmail *imap.Message) error {
 		email.fromName = imapEmail.Envelope.From[0].PersonalName
 	}
 
-	cachedEmailEnvelopeSet(folder, &email)
+	cachedEmailEnvelopeSet(&email)
 	insertImapEmailToList(email)
 	return nil
 }
