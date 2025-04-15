@@ -100,46 +100,22 @@ func imapLogin() *client.Client {
 	return clt
 }
 
-func imapWorker() {
-	_, err := toml.DecodeFile("kagimail.toml", &g_config)
-	if err != nil {
-		log.Fatal(err)
-	}
+const (
+	fetchEmailBodyViaUID = 1 << iota
+	fetchAllEmailsInFolder
+	fetchLatestEmails
+	fetchSingleEmailViaSeq
+)
 
-	clt := imapLogin()
-	defer clt.Logout()
-	chImapUpdates := make(chan client.Update, 10)
-
-	// separate client to listen for idle commands to fetch new incoming emails
-	go func() {
-		cltIdle := imapLogin()
-		defer cltIdle.Logout()
-		_, err = cltIdle.Select("inbox", true)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		chImapUpdatesStop := make(chan struct{}, 1)
-		chImapUpdatesDone := make(chan error, 1)
-		cltIdle.Updates = chImapUpdates
-		chImapUpdatesDone <- cltIdle.Idle(chImapUpdatesStop, nil)
-	}()
-
-	const (
-		fetchEmailBodyViaUID = 1 << iota
-
-		fetchAllEmailsInFolder
-		fetchLatestEmails
-		fetchSingleEmailViaSeq
-	)
-
-	handleEmails := func(
-		folder string,
-		chEmails chan *imap.Message,
-		handleImapEmail func(string, *imap.Message) error,
-	) error {
+func imapFetchEmails(clt *client.Client,
+	uid uint32,
+	folder string,
+	handleImapEmail func(string, *imap.Message) error,
+	chAllDone chan error,
+	flags uint,
+) {
+	handleEmails := func(folder string, chEmails chan *imap.Message) error {
 	fetchLoop:
-		// read from channel and use handleImapEmail handler
 		for {
 			select {
 			case imapEmail, ok := <-chEmails:
@@ -157,174 +133,216 @@ func imapWorker() {
 		return nil
 	}
 
-	fetchEmail := func(
-		uid uint32,
-		folder string,
-		handleImapEmail func(string, *imap.Message) error,
-		chAllDone chan error,
-		flags uint,
-	) {
-		mailbox, err := clt.Select(folder, true)
-		if err != nil {
-			chAllDone <- err
+	fetchMultipleEmails := func(lowWater int, hiWater int) {
+		chunkSize := 10
+		// retrieving in chunks, from newest to oldest
+		for lo := int(hiWater); lo > lowWater; {
+			// construct request to fetch emails
+			chEmails := make(chan *imap.Message, 10)
+			chFetchDone := make(chan error, 1)
+			hi := lo
+			lo -= chunkSize
+			lo = max(0, lo)
+
+			seqSet := new(imap.SeqSet)
+			seqSet.AddRange(uint32(lo+1), uint32(hi))
+			go func() {
+				fi := []imap.FetchItem{
+					imap.FetchEnvelope, imap.FetchUid,
+				}
+				chFetchDone <- clt.Fetch(seqSet, fi, chEmails)
+			}()
+
+			err := handleEmails(folder, chEmails)
+			if err != nil {
+				chAllDone <- err
+				break
+			}
+
+			err = <-chFetchDone
+			if err != nil {
+				chAllDone <- err
+				break
+			}
 		}
 
-		fetchMultipleEmails := func(lowWater int, hiWater int) {
-			chunkSize := 10
-			// retrieving in chunks, from newest to oldest
-			for lo := int(hiWater); lo > lowWater; {
-				// construct request to fetch chEmails
-				chEmails := make(chan *imap.Message, 10)
-				chEmailsDone := make(chan error, 1)
-				hi := lo
-				lo -= chunkSize
-				lo = max(0, lo)
+		chAllDone <- nil
+	}
 
-				seqSet := new(imap.SeqSet)
-				seqSet.AddRange(uint32(lo+1), uint32(hi))
+	const (
+		fetchUsingUid = 1 << iota
+		fetchUsingSeq
+	)
+
+	fetchSingleEmail := func(
+		uid uint32, items []imap.FetchItem, flags int,
+	) {
+		chEmails := make(chan *imap.Message, 10)
+		seqSet := new(imap.SeqSet)
+		seqSet.AddNum(uid)
+		go func() {
+			done := make(chan error, 1)
+			if flags&fetchUsingUid != 0 {
+				done <- clt.UidFetch(seqSet, items, chEmails)
+			} else if flags&fetchUsingSeq != 0 {
+				done <- clt.Fetch(seqSet, items, chEmails)
+			} else {
+				AssertNotReachable("needed fetchUsing flag")
+			}
+
+			err := <-done
+			if err != nil {
+				chAllDone <- err
+			}
+		}()
+
+		chAllDone <- handleEmails(folder, chEmails)
+	}
+
+	mailbox, err := clt.Select(folder, true)
+	if err != nil {
+		chAllDone <- err
+	}
+	emailCountAfter := int(mailbox.Messages)
+
+	if flags&fetchAllEmailsInFolder != 0 {
+		notifyFetchAllStarted(folder, emailCountAfter)
+		fetchMultipleEmails(0, emailCountAfter)
+	} else if flags&fetchLatestEmails != 0 {
+		emailCountBefore := cachedEmailFromFolderItemCount(folder)
+		if emailCountBefore < emailCountAfter {
+			notifyFetchLatestStarted(folder, emailCountAfter)
+			fetchMultipleEmails(emailCountBefore, emailCountAfter)
+		}
+	} else if flags&fetchSingleEmailViaSeq != 0 {
+		fetchSingleEmail(
+			uid /* treat as seq */, []imap.FetchItem{
+				imap.FetchEnvelope, imap.FetchUid,
+			}, fetchUsingSeq)
+	} else if flags&fetchEmailBodyViaUID != 0 {
+		section := &imap.BodySectionName{
+			Peek: false,
+		}
+		fetchSingleEmail(uid, []imap.FetchItem{
+			imap.FetchUid, section.FetchItem(),
+		}, fetchUsingUid)
+	}
+}
+
+func imapWorker() {
+	_, err := toml.DecodeFile("kagimail.toml", &g_config)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	chImapUpdates := make(chan client.Update, 10)
+
+	// separate client to listen for idle commands to fetch new incoming emails
+	go func() {
+		cltIdle := imapLogin()
+		defer cltIdle.Logout()
+		_, err = cltIdle.Select("inbox", true)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		chImapUpdatesStop := make(chan struct{}, 1)
+		chImapUpdatesDone := make(chan error, 1)
+		cltIdle.Updates = chImapUpdates
+		chImapUpdatesDone <- cltIdle.Idle(chImapUpdatesStop, nil)
+	}()
+
+	//  high-priority view messages
+	go func() {
+		clt := imapLogin()
+		defer clt.Logout()
+		for {
+			select {
+			case req := <-chFetchEmailBody:
+				imapFetchEmails(
+					clt,
+					req.uid,
+					req.folder,
+					updateEmailBody,
+					req.done,
+					fetchEmailBodyViaUID,
+				)
+			}
+		}
+	}()
+
+	// downloading folders and all emails in a folder
+	go func() {
+		clt := imapLogin()
+		defer clt.Logout()
+		for {
+			select {
+			case req := <-chFetchFolderList:
+				mailboxes := make(chan *imap.MailboxInfo, 10)
 				go func() {
-					chEmailsDone <- clt.Fetch(seqSet, []imap.FetchItem{
-						imap.FetchEnvelope, imap.FetchUid,
-					}, chEmails)
+					req.done <- clt.List(
+						"" /* base folder hierarchy */, "*", mailboxes)
 				}()
 
-				err := handleEmails(folder, chEmails, handleImapEmail)
-				if err != nil {
-					chAllDone <- err
-					break
+				for mailbox := range mailboxes {
+					insertFolderToList(mailbox.Name)
 				}
 
-				err = <-chEmailsDone
-				if err != nil {
-					chAllDone <- err
-					break
-				}
+			case req := <-chFetchFolder:
+				imapFetchEmails(
+					clt,
+					0,
+					req.folder,
+					appendImapEmailToUI,
+					req.done,
+					fetchAllEmailsInFolder,
+				)
 			}
-
-			chAllDone <- nil
 		}
+	}()
 
-		const (
-			fetchUsingUid = 1 << iota
-			fetchUsingSeq
-		)
+	// imap idle handlers
+	go func() {
+		clt := imapLogin()
+		defer clt.Logout()
 
-		fetchSingleEmail := func(
-			uid uint32, items []imap.FetchItem, flags int,
-		) {
-			chEmails := make(chan *imap.Message, 10)
-			seqSet := new(imap.SeqSet)
-			seqSet.AddNum(uid)
-			go func() {
-				done := make(chan error, 1)
-				if flags&fetchUsingUid != 0 {
-					done <- clt.UidFetch(seqSet, items, chEmails)
-				} else if flags&fetchUsingSeq != 0 {
-					done <- clt.Fetch(seqSet, items, chEmails)
-				} else {
-					AssertNotReachable("needed fetchUsing flag")
-				}
+		for {
+			select {
+			case update := <-chImapUpdates:
+				switch update.(type) {
+				case *client.MailboxUpdate:
+					folder := g_ui.folderSelected
+					mailCountBefore := cachedEmailFromFolderItemCount(folder)
+					mailboxUpdate := update.(*client.MailboxUpdate)
+					if int(mailboxUpdate.Mailbox.Messages) <= mailCountBefore {
+						continue
+					}
+					done := make(chan error)
+					imapFetchEmails(
+						clt, 0, folder, appendImapEmailToUI, done, fetchLatestEmails)
+					err := <-done
+					if err != nil {
+						updateStatusBar(fmt.Sprintf(
+							"Unable update mailbox \"%s\": %v", folder, err))
+					}
 
-				err := <-done
-				if err != nil {
-					chAllDone <- err
-				}
-			}()
-
-			chAllDone <- handleEmails(folder, chEmails, handleImapEmail)
-		}
-
-		emailCountAfter := int(mailbox.Messages)
-		if flags&fetchAllEmailsInFolder != 0 {
-			notifyFetchAllStarted(folder, emailCountAfter)
-			fetchMultipleEmails(0, emailCountAfter)
-		} else if flags&fetchLatestEmails != 0 {
-			emailCountBefore := cachedEmailFromFolderItemCount(folder)
-			if emailCountBefore < emailCountAfter {
-				notifyFetchLatestStarted(folder, emailCountAfter)
-				fetchMultipleEmails(emailCountBefore, emailCountAfter)
-			}
-		} else if flags&fetchSingleEmailViaSeq != 0 {
-			fetchSingleEmail(
-				uid /* treat as seq */, []imap.FetchItem{
-					imap.FetchEnvelope, imap.FetchUid,
-				}, fetchUsingSeq)
-		} else if flags&fetchEmailBodyViaUID != 0 {
-			section := &imap.BodySectionName{
-				Peek: false,
-			}
-			fetchSingleEmail(uid, []imap.FetchItem{
-				imap.FetchUid, section.FetchItem(),
-			}, fetchUsingUid)
-		}
-	} // end: fetchEmail := func( ...
-
-	// joined imap client commands
-	for {
-		select {
-		case req := <-chFetchFolder:
-			fetchEmail(
-				0,
-				req.folder,
-				appendImapEmailToUI,
-				req.done,
-				fetchAllEmailsInFolder,
-			)
-
-		case req := <-chFetchEmailBody:
-			fetchEmail(
-				req.uid,
-				req.folder,
-				updateEmailBody,
-				req.done,
-				fetchEmailBodyViaUID,
-			)
-
-		case req := <-chFetchFolderList:
-			mailboxes := make(chan *imap.MailboxInfo, 10)
-			go func() {
-				req.done <- clt.List(
-					"" /* base folder hierarchy */, "*", mailboxes)
-			}()
-
-			for mailbox := range mailboxes {
-				insertFolderToList(mailbox.Name)
-			}
-
-		case update := <-chImapUpdates:
-			switch update.(type) {
-			case *client.MailboxUpdate:
-				folder := g_ui.folderSelected
-				mailCountBefore := cachedEmailFromFolderItemCount(folder)
-				mailboxUpdate := update.(*client.MailboxUpdate)
-				if int(mailboxUpdate.Mailbox.Messages) <= mailCountBefore {
-					continue
-				}
-				done := make(chan error)
-				fetchEmail(
-					0, folder, appendImapEmailToUI, done, fetchLatestEmails)
-				err := <-done
-				if err != nil {
-					updateStatusBar(fmt.Sprintf(
-						"Unable update mailbox \"%s\": %v", folder, err))
-				}
-
-			case *client.MessageUpdate:
-				messageUpdate := update.(*client.MessageUpdate)
-				folder := g_ui.folderSelected
-				seqNum := messageUpdate.Message.SeqNum
-				done := make(chan error)
-				fetchEmail(
-					seqNum, folder, appendImapEmailToUI, done,
-					fetchSingleEmailViaSeq)
-				err := <-done
-				if err != nil {
-					updateStatusBar(fmt.Sprintf(
-						"Unable update message of seq \"%d\": %v", seqNum, err))
+				case *client.MessageUpdate:
+					messageUpdate := update.(*client.MessageUpdate)
+					folder := g_ui.folderSelected
+					seqNum := messageUpdate.Message.SeqNum
+					done := make(chan error)
+					imapFetchEmails(
+						clt, seqNum, folder, appendImapEmailToUI, done,
+						fetchSingleEmailViaSeq)
+					err := <-done
+					if err != nil {
+						updateStatusBar(fmt.Sprintf(
+							"Unable update message of seq \"%d\": %v", seqNum, err))
+					}
 				}
 			}
 		}
-	}
+	}()
 }
 
 func updateEmailBody(folder string, imapEmail *imap.Message) error {
