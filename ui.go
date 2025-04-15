@@ -12,6 +12,7 @@ import (
 func notifyFetchAllStarted(folder string, n int) {
 	g_ui.app.QueueUpdateDraw(func() {
 		g_ui.emailsList.Clear()
+		g_ui.emailsUidList = g_ui.emailsUidList[:0]
 		g_ui.folderSelected = folder
 		g_ui.folderItemCount = n
 		g_ui.emailsPegSelectionToTop = true
@@ -135,7 +136,12 @@ func updateStatusBar(text string) {
 
 func insertImapEmailToList(email Email) {
 	g_ui.app.QueueUpdateDraw(func() {
-		i := cachedEmailByFolderBinarySearch(email)
+		Assert(
+			g_ui.folderSelected == email.folder,
+			"adding email not from selected folder",
+		)
+
+		i := cachedEmailFromUidsBinarySearch(g_ui.emailsUidList, email)
 		if i < len(g_ui.emailsUidList) && g_ui.emailsUidList[i] == email.id {
 			return // already added
 		}

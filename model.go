@@ -36,21 +36,32 @@ func cachedEmailByFolderBinarySearch(email Email) int {
 	return cachedEmailByFolderBinarySearchLocked(email)
 }
 
+func cachedEmailFromUidsBinarySearch(emailsUidList []uint32, email Email) int {
+	g_emailsMu.Lock()
+	defer g_emailsMu.Unlock()
+
+	folder := email.folder
+	return sort.Search(len(g_ui.emailsUidList), func(k int) bool {
+		e := g_emailFromUid[folder][emailsUidList[k]]
+		return !emailCompare(*e, email)
+	})
+}
+
+func emailCompare(e1 Email, e2 Email) bool {
+	if e1.date == e2.date {
+		return e1.id > e2.id
+	}
+	return e1.date.After(e2.date)
+}
+
 func cachedEmailByFolderBinarySearchLocked(email Email) int {
 	Assert(g_emailsMu.TryLock() == false, "g_emailsMu needs to be locked")
 	Require(email.id != 0, "email.id required")
 	Require(email.folder != "", "email.folder required")
 
-	fnDateCompare := func(e1 Email, e2 Email) bool {
-		if e1.date == e2.date {
-			return e1.id > e2.id
-		}
-		return e1.date.After(e2.date)
-	}
-
 	folder := email.folder
 	return sort.Search(len(g_emailsFromFolder[folder]), func(k int) bool {
-		return !fnDateCompare(*g_emailsFromFolder[folder][k], email)
+		return !emailCompare(*g_emailsFromFolder[folder][k], email)
 	})
 }
 
