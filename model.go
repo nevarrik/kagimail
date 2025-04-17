@@ -5,6 +5,7 @@ import (
 	"sort"
 	"sync"
 	"time"
+	"unsafe"
 )
 
 type Email struct {
@@ -90,45 +91,72 @@ func cachedEmailByFolderInsertLocked(email *Email) (int, bool) {
 
 func cachedEmailBodyUpdate(folder string, uid uint32, body string, size int64) {
 	Require(body != "", "we need some body to update")
+	assertValidFolderName(folder)
 	g_emailsMu.Lock()
 	email, ok := g_emailFromUid[folder][uid]
 	Assert(ok, "we needed a valid envelope first before setting body")
 	email.body = body
 	email.size = uint64(size)
-	i := cachedEmailByFolderBinarySearchLocked(*email)
-
-	e1 := g_emailsFromFolder[folder][i]
-	e2 := g_emailFromUid[folder][uid]
-	Assert(e1.id == uid, fmt.Sprintf("email uid: %d, not in cache", uid))
-	Assert(e2.id == uid, fmt.Sprintf("email uid: %d, not in cache", uid))
-	Assert(e1.body != "" && e2.body != "", "body not updated correctly")
-	Assert(e1.body == e2.body, "body not updated correctly across maps")
+	assertEmailCorrectlyInCacheLocked(folder, email)
 	g_emailsMu.Unlock()
 }
 
 func cachedEmailFromUid(folder string, uid uint32) Email {
+	assertValidFolderName(folder)
 	g_emailsMu.Lock()
 	defer g_emailsMu.Unlock()
 	return *g_emailFromUid[folder][uid]
 }
 
+func cachedEmailFromUidChecked(folder string, uid uint32) (Email, bool) {
+	assertValidFolderName(folder)
+	g_emailsMu.Lock()
+	defer g_emailsMu.Unlock()
+	email, exists := g_emailFromUid[folder][uid]
+	if exists {
+		return *email, exists
+	} else {
+		return Email{}, exists
+	}
+}
+
 func cachedEmailEnvelopeSet(email *Email) {
-	Require(email.id != 0, "email.id required")
+	Require(email.uid != 0, "email.id required")
 	Require(email.folder != "", "email.folder required")
 	folder := email.folder
+	assertValidFolderName(folder)
 	g_emailsMu.Lock()
 	emailsByFolder, ok := g_emailFromUid[folder]
 	if !ok {
 		emailsByFolder = make(map[uint32]*Email)
 		g_emailFromUid[folder] = emailsByFolder
 	}
-	emailsByFolder[email.id] = email
+	_, ok = emailsByFolder[email.uid]
+	if !ok {
+		emailsByFolder[email.uid] = email
+	}
 	cachedEmailByFolderInsertLocked(email)
+	assertEmailCorrectlyInCacheLocked(folder, email)
 	g_emailsMu.Unlock()
 }
 
 func cachedEmailFromFolderItemCount(folder string) int {
+	assertValidFolderName(folder)
 	g_emailsMu.Lock()
 	defer g_emailsMu.Unlock()
 	return len(g_emailsFromFolder[folder])
+}
+
+func assertEmailCorrectlyInCacheLocked(folder string, email *Email) {
+	assertValidFolderName(folder)
+	uid := email.uid
+	i := cachedEmailByFolderBinarySearchLocked(*email)
+	e1 := g_emailsFromFolder[folder][i]
+	e2 := g_emailFromUid[folder][uid]
+	Assert(
+		unsafe.Pointer(e1) == unsafe.Pointer(e2),
+		"caches are pointing to different emails",
+	)
+	Assert(e1.uid == uid, fmt.Sprintf("email uid: %d, not in cache", uid))
+	Assert(e2.uid == uid, fmt.Sprintf("email uid: %d, not in cache", uid))
 }

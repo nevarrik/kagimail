@@ -8,6 +8,7 @@ require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/cloudfoundry/jibber_jabber v0.0.0-20151120183258-bcc4c8345a21
 	github.com/emersion/go-imap v1.2.1
+	github.com/emersion/go-imap-sortthread v1.2.0
 	github.com/emersion/go-message v0.15.0
 	github.com/gdamore/tcell/v2 v2.8.1
 	github.com/goodsign/monday v1.0.2
