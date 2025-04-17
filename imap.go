@@ -156,10 +156,9 @@ func imapFetchViaCriteria(
 		Assert(loWater >= 1, "0 isn't the first mail in imap, use 1")
 
 		searchChunkSize := 100
-		for lo := hiWater; lo > loWater; {
-			hi := lo
-			lo -= searchChunkSize
-			lo = max(loWater, lo)
+		for hi := hiWater; hi > 0; hi -= searchChunkSize {
+			lo := hi - searchChunkSize
+			lo = max(loWater, lo+1)
 			if flags&fetchAllEmailsInFolder != 0 {
 				searchCriteria.SeqNum = new(imap.SeqSet)
 				searchCriteria.SeqNum.AddRange(uint32(lo), uint32(hi))
@@ -172,6 +171,14 @@ func imapFetchViaCriteria(
 			}
 
 			uids = append(uids, uids_...)
+		}
+
+		// perf: ensure no overlapping ranges when chunking uids
+		seen := make(map[uint32]bool)
+		for _, x := range uids {
+			_, ok := seen[x]
+			Assert(!ok, "duplicate uid")
+			seen[x] = true
 		}
 	} else if searchCriteria.Uid != nil {
 		Assert(flags&fetchEmailBodyViaUID != 0,
