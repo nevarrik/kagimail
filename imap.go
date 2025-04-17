@@ -153,15 +153,16 @@ func imapFetchViaCriteria(
 		Assert(len(searchCriteria.SeqNum.Set) == 1, "only works with 1 seq")
 		loWater := int(searchCriteria.SeqNum.Set[0].Start)
 		hiWater := int(searchCriteria.SeqNum.Set[0].Stop) + 1
+		Assert(loWater >= 1, "0 isn't the first mail in imap, use 1")
 
 		searchChunkSize := 100
 		for lo := hiWater; lo > loWater; {
 			hi := lo
 			lo -= searchChunkSize
 			lo = max(loWater, lo)
-			if flags&(fetchAllEmailsInFolder) != 0 {
+			if flags&fetchAllEmailsInFolder != 0 {
 				searchCriteria.SeqNum = new(imap.SeqSet)
-				searchCriteria.SeqNum.AddRange(uint32(lo+1), uint32(hi))
+				searchCriteria.SeqNum.AddRange(uint32(lo), uint32(hi))
 			}
 
 			uids_, err := sortClt.UidSort(sortCriteria, searchCriteria)
