@@ -20,6 +20,21 @@ func notifyFetchAllStarted(folder string, n int) {
 	})
 }
 
+func notifyFetchAllFinished(err error, folder string) {
+	if err != nil {
+		updateStatusBar(fmt.Sprintf(
+			"Unable to download messages for folder \"%s\": %v", folder, err))
+		return
+	}
+
+	g_ui.app.QueueUpdateDraw(func() {
+		if g_ui.emailsList.GetItemCount() == g_ui.folderItemCount {
+			updateEmailStatusBar(fmt.Sprintf(
+				"Folder up to date with %d emails", g_ui.folderItemCount))
+		}
+	})
+}
+
 func notifyFetchLatestStarted(folder string, n int) {
 	g_ui.app.QueueUpdateDraw(func() {
 		g_ui.folderItemCount = n
@@ -115,15 +130,23 @@ func previewPaneSetReply() {
 	g_ui.previewText.SetText(reply.String(), false)
 }
 
-func updateEmailStatusBar() {
+func updateEmailStatusBarWithSelection() {
 	k := g_ui.emailsList.GetCurrentItem()
-	g_ui.emailsStatusBar.SetText(fmt.Sprintf(
+	updateEmailStatusBar(fmt.Sprintf(
 		"Email %d of %d [%d] (ItemCount=%d)",
 		k+1,
 		g_ui.folderItemCount,
 		g_ui.emailsUidList[k],
 		g_ui.emailsList.GetItemCount(),
 	))
+}
+
+func updateEmailStatusBar(text string) {
+	if IsOnUiThread() {
+		g_ui.emailsStatusBar.SetText(text)
+	} else {
+		g_ui.app.QueueUpdateDraw(func() { g_ui.emailsStatusBar.SetText(text) })
+	}
 }
 
 func updateStatusBar(text string) {
@@ -142,14 +165,14 @@ func insertImapEmailToList(email Email) {
 		)
 
 		i := cachedEmailFromUidsBinarySearch(g_ui.emailsUidList, email)
-		if i < len(g_ui.emailsUidList) && g_ui.emailsUidList[i] == email.id {
+		if i < len(g_ui.emailsUidList) && g_ui.emailsUidList[i] == email.uid {
 			return // already added
 		}
 
 		// insert into emailsUidList
 		g_ui.emailsUidList = append(g_ui.emailsUidList, 0)
 		copy(g_ui.emailsUidList[i+1:], g_ui.emailsUidList[i:])
-		g_ui.emailsUidList[i] = email.id
+		g_ui.emailsUidList[i] = email.uid
 		// insert into ui
 		secondaryLine := fmt.Sprintf("%s from: %s",
 			email.date.Format(time.Stamp), email.fromAddress)
@@ -167,10 +190,10 @@ func insertImapEmailToList(email Email) {
 
 		// update statusbar
 		if g_ui.emailsList.GetItemCount() == g_ui.folderItemCount {
-			g_ui.emailsStatusBar.SetText(fmt.Sprintf(
+			updateEmailStatusBar(fmt.Sprintf(
 				"Folder up to date with %d emails", g_ui.folderItemCount))
 		} else {
-			g_ui.emailsStatusBar.SetText(
+			updateEmailStatusBar(
 				fmt.Sprintf("Downloading %d emails", g_ui.folderItemCount-g_ui.emailsList.GetItemCount()))
 		}
 	})

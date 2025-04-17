@@ -9,7 +9,7 @@ import (
 )
 
 type Email struct {
-	id          uint32
+	uid         uint32
 	folder      string
 	subject     string
 	date        time.Time
@@ -50,14 +50,14 @@ func cachedEmailFromUidsBinarySearch(emailsUidList []uint32, email Email) int {
 
 func emailCompare(e1 Email, e2 Email) bool {
 	if e1.date == e2.date {
-		return e1.id > e2.id
+		return e1.uid > e2.uid
 	}
 	return e1.date.After(e2.date)
 }
 
 func cachedEmailByFolderBinarySearchLocked(email Email) int {
 	Assert(g_emailsMu.TryLock() == false, "g_emailsMu needs to be locked")
-	Require(email.id != 0, "email.id required")
+	Require(email.uid != 0, "email.id required")
 	Require(email.folder != "", "email.folder required")
 
 	folder := email.folder
@@ -68,12 +68,12 @@ func cachedEmailByFolderBinarySearchLocked(email Email) int {
 
 func cachedEmailByFolderInsertLocked(email *Email) (int, bool) {
 	Assert(g_emailsMu.TryLock() == false, "g_emailsMu needs to be locked")
-	Require(email.id != 0, "email.id required")
+	Require(email.uid != 0, "email.id required")
 	Require(email.folder != "", "email.folder required")
 	folder := email.folder
 	i := cachedEmailByFolderBinarySearchLocked(*email)
 	if i < len(g_emailsFromFolder[folder]) &&
-		g_emailsFromFolder[folder][i].id == email.id {
+		g_emailsFromFolder[folder][i].uid == email.uid {
 		return i, true
 	}
 

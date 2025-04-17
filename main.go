@@ -25,11 +25,16 @@ func main() {
 	g_ui.app = tview.NewApplication()
 
 	g_ui.foldersList = tview.NewList()
+	g_ui.foldersList.SetSelectedFunc(
+		func(_ int, main string, _ string, _ rune) {
+			go fetchFolder(main)
+		},
+	)
 
 	g_ui.emailsList = tview.NewList()
 	g_ui.emailsList.SetWrapAround(false)
 	g_ui.emailsList.SetChangedFunc(
-		func(int, string, string, rune) { updateEmailStatusBar() })
+		func(int, string, string, rune) { updateEmailStatusBarWithSelection() })
 	g_ui.emailsList.SetSelectedFunc(func(k int, _ string, _ string, _ rune) {
 		go fetchEmailBody(g_ui.folderSelected, g_ui.emailsUidList[k])
 	})
@@ -54,7 +59,6 @@ func main() {
 
 	g_ui.emailsStatusBar.
 		SetTextAlign(tview.AlignRight).
-		SetText("Downloading emails ").
 		SetTextColor(tcell.NewHexColor(0xFFD369)).
 		SetBackgroundColor(tcell.NewHexColor(0x393E46))
 

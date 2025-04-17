@@ -18,7 +18,7 @@ func smtpWorker() {
 	for {
 		select {
 		case email := <-chSendMails:
-			Require(email.id != 0, "requires id")
+			Require(email.uid != 0, "requires id")
 			msg := mail.NewMessage()
 			msg.SetHeader(
 				"From",

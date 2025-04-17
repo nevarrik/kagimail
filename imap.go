@@ -6,17 +6,20 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/emersion/go-imap"
+	sortthread "github.com/emersion/go-imap-sortthread"
 	"github.com/emersion/go-imap/client"
 	"github.com/emersion/go-message/mail"
 )
 
 type FetchFolderRequest struct {
-	folder string
-	done   chan error
+	folder    string
+	mailCount chan int
+	done      chan error
 }
 
 type FetchEmailBodyRequest struct {
@@ -50,14 +53,15 @@ func fetchEmailBody(folder string, uid uint32) {
 }
 
 func fetchFolder(folder string) {
+	emailCount := make(chan int, 1)
 	done := make(chan error, 1)
-	chFetchFolder <- FetchFolderRequest{folder, done}
+	chFetchFolder <- FetchFolderRequest{folder, emailCount, done}
+
+	n := <-emailCount
+	notifyFetchAllStarted(folder, n)
 
 	err := <-done
-	if err != nil {
-		updateStatusBar(fmt.Sprintf(
-			"Unable to download messages for folder \"%s\": %v", folder, err))
-	}
+	notifyFetchAllFinished(err, folder)
 }
 
 func fetchFolderList() {
@@ -104,129 +108,145 @@ const (
 	fetchEmailBodyViaUID = 1 << iota
 	fetchAllEmailsInFolder
 	fetchLatestEmails
-	fetchSingleEmailViaSeq
+	fetchSingle
 )
 
-func imapFetchEmails(clt *client.Client,
-	uid uint32,
+func imapFetchViaCriteria(
+	clt *client.Client,
 	folder string,
-	handleImapEmail func(string, *imap.Message) error,
+	searchCriteria *imap.SearchCriteria,
 	chAllDone chan error,
 	flags uint,
 ) {
-	handleEmails := func(folder string, chEmails chan *imap.Message) error {
-	fetchLoop:
+	collectEmails := func(folder string, chEmails chan *imap.Message) []*Email {
+		var emails []*Email
 		for {
 			select {
 			case imapEmail, ok := <-chEmails:
 				if !ok {
-					break fetchLoop
+					return emails
 				}
 
-				err := handleImapEmail(folder, imapEmail)
-				if err != nil {
-					return err
-				}
+				email := emailFromImapEmail(folder, imapEmail)
+				emails = append(emails, email)
 			}
 		}
-
-		return nil
 	}
 
-	fetchMultipleEmails := func(lowWater int, hiWater int) {
-		chunkSize := 10
-		// retrieving in chunks, from newest to oldest
-		for lo := int(hiWater); lo > lowWater; {
-			// construct request to fetch emails
-			chEmails := make(chan *imap.Message, 10)
-			chFetchDone := make(chan error, 1)
-			hi := lo
-			lo -= chunkSize
-			lo = max(0, lo)
-
-			seqSet := new(imap.SeqSet)
-			seqSet.AddRange(uint32(lo+1), uint32(hi))
-			go func() {
-				fi := []imap.FetchItem{
-					imap.FetchEnvelope, imap.FetchUid,
-				}
-				chFetchDone <- clt.Fetch(seqSet, fi, chEmails)
-			}()
-
-			err := handleEmails(folder, chEmails)
-			if err != nil {
-				chAllDone <- err
-				break
-			}
-
-			err = <-chFetchDone
-			if err != nil {
-				chAllDone <- err
-				break
-			}
-		}
-
-		chAllDone <- nil
-	}
-
-	const (
-		fetchUsingUid = 1 << iota
-		fetchUsingSeq
-	)
-
-	fetchSingleEmail := func(
-		uid uint32, items []imap.FetchItem, flags int,
-	) {
-		chEmails := make(chan *imap.Message, 10)
-		seqSet := new(imap.SeqSet)
-		seqSet.AddNum(uid)
-		go func() {
-			done := make(chan error, 1)
-			if flags&fetchUsingUid != 0 {
-				done <- clt.UidFetch(seqSet, items, chEmails)
-			} else if flags&fetchUsingSeq != 0 {
-				done <- clt.Fetch(seqSet, items, chEmails)
-			} else {
-				AssertNotReachable("needed fetchUsing flag")
-			}
-
-			err := <-done
-			if err != nil {
-				chAllDone <- err
-			}
-		}()
-
-		chAllDone <- handleEmails(folder, chEmails)
-	}
-
-	mailbox, err := clt.Select(folder, true)
+	_, err := clt.Select(folder, true)
 	if err != nil {
 		chAllDone <- err
+		return
 	}
-	emailCountAfter := int(mailbox.Messages)
+	sortClt := sortthread.NewSortClient(clt)
 
-	if flags&fetchAllEmailsInFolder != 0 {
-		notifyFetchAllStarted(folder, emailCountAfter)
-		fetchMultipleEmails(0, emailCountAfter)
-	} else if flags&fetchLatestEmails != 0 {
-		emailCountBefore := cachedEmailFromFolderItemCount(folder)
-		if emailCountBefore < emailCountAfter {
-			notifyFetchLatestStarted(folder, emailCountAfter)
-			fetchMultipleEmails(emailCountBefore, emailCountAfter)
-		}
-	} else if flags&fetchSingleEmailViaSeq != 0 {
-		fetchSingleEmail(
-			uid /* treat as seq */, []imap.FetchItem{
-				imap.FetchEnvelope, imap.FetchUid,
-			}, fetchUsingSeq)
-	} else if flags&fetchEmailBodyViaUID != 0 {
-		section := &imap.BodySectionName{
-			Peek: false,
-		}
-		fetchSingleEmail(uid, []imap.FetchItem{
-			imap.FetchUid, section.FetchItem(),
-		}, fetchUsingUid)
+	sortCriteria := []sortthread.SortCriterion{
+		{Field: sortthread.SortDate, Reverse: true},
 	}
+
+	// get a list of uids in sorted order
+	//
+	var uids []uint32
+	if searchCriteria.SeqNum != nil {
+		Assert(len(searchCriteria.SeqNum.Set) == 1, "only works with 1 seq")
+		loWater := int(searchCriteria.SeqNum.Set[0].Start)
+		hiWater := int(searchCriteria.SeqNum.Set[0].Stop) + 1
+
+		searchChunkSize := 100
+		for lo := hiWater; lo > loWater; {
+			hi := lo
+			lo -= searchChunkSize
+			lo = max(loWater, lo)
+			if flags&(fetchAllEmailsInFolder) != 0 {
+				searchCriteria.SeqNum = new(imap.SeqSet)
+				searchCriteria.SeqNum.AddRange(uint32(lo+1), uint32(hi))
+			}
+
+			uids_, err := sortClt.UidSort(sortCriteria, searchCriteria)
+			if err != nil {
+				chAllDone <- err
+				return
+			}
+
+			uids = append(uids, uids_...)
+		}
+	} else if searchCriteria.Uid != nil {
+		Assert(flags&fetchEmailBodyViaUID != 0,
+			"this is the only case I know of where we hit this path")
+		Assert(len(searchCriteria.Uid.Set) == 1, "only works with 1 uid")
+		Assert(searchCriteria.Uid.Set[0].Start ==
+			searchCriteria.Uid.Set[0].Stop, "only works with 1 uid")
+		uids = append(uids, searchCriteria.Uid.Set[0].Start)
+	}
+
+	// fetch emails from list of uids
+	//
+	fetchChunkSize := 20
+	seqSet := new(imap.SeqSet)
+	n := 0
+	for k, uid := range uids {
+		if flags&fetchEmailBodyViaUID == 0 {
+			email, exists := cachedEmailFromUidChecked(folder, uid)
+			if exists {
+				insertImapEmailToList(email)
+				continue
+			}
+		}
+
+		seqSet.AddNum(uid)
+		n += 1
+		if n == fetchChunkSize || (k == len(uids)-1 && n > 0) {
+			chEmails := make(chan *imap.Message, fetchChunkSize)
+			chFetchDone := make(chan error, 1)
+			go func() {
+				fi := []imap.FetchItem{imap.FetchUid}
+				if flags&fetchEmailBodyViaUID != 0 {
+					section := &imap.BodySectionName{
+						Peek: false,
+					}
+					fi = append(fi, section.FetchItem())
+				} else {
+					fi = append(fi, imap.FetchEnvelope)
+				}
+				chFetchDone <- clt.UidFetch(seqSet, fi, chEmails)
+			}()
+
+			if flags&fetchEmailBodyViaUID != 0 {
+			fetchLoop:
+				for {
+					select {
+					case imapEmail, ok := <-chEmails:
+						if !ok {
+							break fetchLoop
+						}
+						updateEmailBody(folder, imapEmail)
+					}
+				}
+				err = <-chFetchDone
+				if err != nil {
+					chAllDone <- err
+					return
+				}
+			} else {
+				emails := collectEmails(folder, chEmails)
+				sort.Slice(emails, func(i, j int) bool {
+					return emailCompare(*emails[i], *emails[j])
+				})
+				for _, email := range emails {
+					cachedEmailEnvelopeSet(email)
+					insertImapEmailToList(*email)
+				}
+
+				err = <-chFetchDone
+				if err != nil {
+					chAllDone <- err
+					return
+				}
+			}
+		}
+	}
+
+	chAllDone <- nil
 }
 
 func imapWorker() {
@@ -289,11 +309,20 @@ func imapWorker() {
 				}
 
 			case req := <-chFetchFolder:
-				imapFetchEmails(
-					clt,
-					0,
+				mailbox, err := cltFillLists.Select(req.folder, true)
+				if err != nil {
+					req.done <- err
+					return
+				}
+				req.mailCount <- int(mailbox.Messages)
+
+				criteria := imap.NewSearchCriteria()
+				criteria.SeqNum = new(imap.SeqSet)
+				criteria.SeqNum.AddRange(1, mailbox.Messages)
+				imapFetchViaCriteria(
+					cltFillLists,
 					req.folder,
-					appendImapEmailToUI,
+					criteria,
 					req.done,
 					fetchAllEmailsInFolder,
 				)
