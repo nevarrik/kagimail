@@ -325,7 +325,7 @@ func imapWorker() {
 	go func() {
 		cltIdle := imapLogin()
 		defer cltIdle.Logout()
-		_, err = cltIdle.Select("inbox", true)
+		_, err = cltIdle.Select("Inbox", true)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -388,9 +388,18 @@ func imapWorker() {
 						updateStatusBar(fmt.Sprintf(
 							"Unable update message of seq \"%d\": %v", seqNum, err))
 					}
-				}
-			}
-		}
+
+				case *client.ExpungeUpdate:
+					expungeUpdate := update.(*client.ExpungeUpdate)
+					folder := "Inbox"
+					k := cachedEmailRemoveViaSeqNum(
+						folder, expungeUpdate.SeqNum)
+					if k != -1 {
+						removeEmailFromList(k)
+					}
+				} // end: switch update.(type)
+			} // end: select
+		} // end: for
 	}()
 }
 
@@ -443,6 +452,7 @@ func updateEmailBody(folder string, imapEmail *imap.Message) error {
 func emailFromImapEmail(folder string, imapEmail *imap.Message) *Email {
 	email := Email{
 		uid:         imapEmail.Uid,
+		seqNum:      imapEmail.SeqNum,
 		folder:      getNormalizedImapFolderName(folder),
 		subject:     imapEmail.Envelope.Subject,
 		date:        imapEmail.Envelope.Date,

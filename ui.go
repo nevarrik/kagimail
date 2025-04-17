@@ -199,6 +199,13 @@ func insertImapEmailToList(email Email) {
 	})
 }
 
+func removeEmailFromList(i int) {
+	g_ui.emailsList.RemoveItem(i)
+	g_ui.emailsUidList = append(
+		g_ui.emailsUidList[:i],
+		g_ui.emailsUidList[i+1:]...)
+}
+
 func insertFolderToList(folder string) {
 	g_ui.app.QueueUpdateDraw(func() {
 		g_ui.foldersList.AddItem(

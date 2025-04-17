@@ -10,6 +10,7 @@ import (
 
 type Email struct {
 	uid         uint32
+	seqNum      uint32
 	folder      string
 	subject     string
 	date        time.Time
@@ -90,6 +91,39 @@ func cachedEmailByFolderInsertLocked(email *Email) (int, bool) {
 	)
 	g_emailsFromFolder[folder][i] = email
 	return i, false
+}
+
+func cachedEmailRemoveViaSeqNum(folder string, seqNum uint32) int {
+	g_emailsMu.Lock()
+	defer g_emailsMu.Unlock()
+
+	uidToRemove := uint32(0)
+	iToRemove := -1
+	for i, email := range g_emailsFromFolder[folder] {
+		if email.seqNum == seqNum {
+			Assert(iToRemove == -1, "found seqNum twice?")
+			iToRemove = i
+			uidToRemove = email.uid
+		}
+	}
+
+	for _, email := range g_emailsFromFolder[folder] {
+		if email.seqNum > seqNum && email.uid != uidToRemove {
+			email.seqNum--
+		}
+	}
+
+	g_emailsFromFolder[folder] = append(
+		g_emailsFromFolder[folder][:iToRemove],
+		g_emailsFromFolder[folder][iToRemove+1:]...)
+
+	if iToRemove != -1 {
+		n := len(g_emailFromUid[folder])
+		delete(g_emailFromUid[folder], uidToRemove)
+		Assert(n > len(g_emailFromUid[folder]), "emailFromUid not removed")
+	}
+
+	return iToRemove
 }
 
 func cachedEmailBodyUpdate(folder string, uid uint32, body string, size int64) {

@@ -2,12 +2,14 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"runtime"
 	"strings"
 )
 
 func Assert(condition bool, msg string) {
 	if !condition {
+		log.Print("Assert failed: ", msg)
 		panic(msg)
 	}
 }
