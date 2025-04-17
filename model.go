@@ -42,6 +42,7 @@ func cachedEmailFromUidsBinarySearch(emailsUidList []uint32, email Email) int {
 	defer g_emailsMu.Unlock()
 
 	folder := email.folder
+	assertValidFolderName(folder)
 	return sort.Search(len(g_ui.emailsUidList), func(k int) bool {
 		e := g_emailFromUid[folder][emailsUidList[k]]
 		return !emailCompare(*e, email)
@@ -61,6 +62,7 @@ func cachedEmailByFolderBinarySearchLocked(email Email) int {
 	Require(email.folder != "", "email.folder required")
 
 	folder := email.folder
+	assertValidFolderName(folder)
 	return sort.Search(len(g_emailsFromFolder[folder]), func(k int) bool {
 		return !emailCompare(*g_emailsFromFolder[folder][k], email)
 	})
@@ -71,6 +73,7 @@ func cachedEmailByFolderInsertLocked(email *Email) (int, bool) {
 	Require(email.uid != 0, "email.id required")
 	Require(email.folder != "", "email.folder required")
 	folder := email.folder
+	assertValidFolderName(folder)
 	i := cachedEmailByFolderBinarySearchLocked(*email)
 	if i < len(g_emailsFromFolder[folder]) &&
 		g_emailsFromFolder[folder][i].uid == email.uid {

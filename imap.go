@@ -39,6 +39,7 @@ var (
 )
 
 func fetchEmailBody(folder string, uid uint32) {
+	assertValidFolderName(folder)
 	var err error = nil
 	var flags uint = 0
 	if cachedEmailFromUid(folder, uid).body == "" {
@@ -53,6 +54,7 @@ func fetchEmailBody(folder string, uid uint32) {
 }
 
 func fetchFolder(folder string) {
+	assertValidFolderName(folder)
 	emailCount := make(chan int, 1)
 	done := make(chan error, 1)
 	chFetchFolder <- FetchFolderRequest{folder, emailCount, done}
@@ -255,35 +257,20 @@ func imapWorker() {
 		log.Fatal(err)
 	}
 
-	chImapUpdates := make(chan client.Update, 10)
-
-	// separate client to listen for idle commands to fetch new incoming emails
-	go func() {
-		cltIdle := imapLogin()
-		defer cltIdle.Logout()
-		_, err = cltIdle.Select("inbox", true)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		chImapUpdatesStop := make(chan struct{}, 1)
-		chImapUpdatesDone := make(chan error, 1)
-		cltIdle.Updates = chImapUpdates
-		chImapUpdatesDone <- cltIdle.Idle(chImapUpdatesStop, nil)
-	}()
-
 	//  high-priority view messages
 	go func() {
-		clt := imapLogin()
-		defer clt.Logout()
+		cltDownloadBody := imapLogin()
+		defer cltDownloadBody.Logout()
 		for {
 			select {
 			case req := <-chFetchEmailBody:
-				imapFetchEmails(
-					clt,
-					req.uid,
+				criteria := imap.NewSearchCriteria()
+				criteria.Uid = new(imap.SeqSet)
+				criteria.Uid.AddNum(req.uid)
+				imapFetchViaCriteria(
+					cltDownloadBody,
 					req.folder,
-					updateEmailBody,
+					criteria,
 					req.done,
 					fetchEmailBodyViaUID,
 				)
@@ -293,14 +280,14 @@ func imapWorker() {
 
 	// downloading folders and all emails in a folder
 	go func() {
-		clt := imapLogin()
-		defer clt.Logout()
+		cltFillLists := imapLogin()
+		defer cltFillLists.Logout()
 		for {
 			select {
 			case req := <-chFetchFolderList:
 				mailboxes := make(chan *imap.MailboxInfo, 10)
 				go func() {
-					req.done <- clt.List(
+					req.done <- cltFillLists.List(
 						"" /* base folder hierarchy */, "*", mailboxes)
 				}()
 
@@ -331,25 +318,56 @@ func imapWorker() {
 	}()
 
 	// imap idle handlers
+	//
+	chImapUpdates := make(chan client.Update, 10)
+
+	// separate client to listen for idle commands to fetch new incoming emails
 	go func() {
-		clt := imapLogin()
-		defer clt.Logout()
+		cltIdle := imapLogin()
+		defer cltIdle.Logout()
+		_, err = cltIdle.Select("inbox", true)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		chImapUpdatesStop := make(chan struct{}, 1)
+		chImapUpdatesDone := make(chan error, 1)
+		cltIdle.Updates = chImapUpdates
+		chImapUpdatesDone <- cltIdle.Idle(chImapUpdatesStop, nil)
+	}()
+
+	// separate client to download emails in response to changes
+	go func() {
+		cltUpdates := imapLogin()
+		defer cltUpdates.Logout()
 
 		for {
 			select {
 			case update := <-chImapUpdates:
 				switch update.(type) {
 				case *client.MailboxUpdate:
-					folder := g_ui.folderSelected
-					mailCountBefore := cachedEmailFromFolderItemCount(folder)
 					mailboxUpdate := update.(*client.MailboxUpdate)
-					if int(mailboxUpdate.Mailbox.Messages) <= mailCountBefore {
+					folder := getNormalizedImapFolderName(
+						mailboxUpdate.Mailbox.Name)
+					emailsInStore := uint32(
+						cachedEmailFromFolderItemCount(folder))
+					emailsAvailable := mailboxUpdate.Mailbox.Messages
+					if emailsAvailable <= emailsInStore {
 						continue
 					}
-					done := make(chan error)
-					imapFetchEmails(
-						clt, 0, folder, appendImapEmailToUI, done, fetchLatestEmails)
+
+					criteria := imap.NewSearchCriteria()
+					criteria.SeqNum = new(imap.SeqSet)
+					criteria.SeqNum.AddRange(emailsInStore+1, emailsAvailable)
+					done := make(chan error, 1)
+					imapFetchViaCriteria(
+						cltUpdates, folder, criteria, done, fetchLatestEmails)
+
 					err := <-done
+					Assert(cachedEmailFromFolderItemCount(folder) ==
+						int(emailsAvailable),
+						"email count not matching mailbox update count")
+
 					if err != nil {
 						updateStatusBar(fmt.Sprintf(
 							"Unable update mailbox \"%s\": %v", folder, err))
@@ -359,10 +377,12 @@ func imapWorker() {
 					messageUpdate := update.(*client.MessageUpdate)
 					folder := g_ui.folderSelected
 					seqNum := messageUpdate.Message.SeqNum
-					done := make(chan error)
-					imapFetchEmails(
-						clt, seqNum, folder, appendImapEmailToUI, done,
-						fetchSingleEmailViaSeq)
+					done := make(chan error, 1)
+					criteria := imap.NewSearchCriteria()
+					criteria.SeqNum = new(imap.SeqSet)
+					criteria.SeqNum.AddNum(seqNum)
+					imapFetchViaCriteria(
+						cltUpdates, folder, criteria, done, fetchSingle)
 					err := <-done
 					if err != nil {
 						updateStatusBar(fmt.Sprintf(
@@ -420,17 +440,17 @@ func updateEmailBody(folder string, imapEmail *imap.Message) error {
 	return nil
 }
 
-func appendImapEmailToUI(folder string, imapEmail *imap.Message) error {
+func emailFromImapEmail(folder string, imapEmail *imap.Message) *Email {
 	email := Email{
-		imapEmail.Uid,
-		folder,
-		imapEmail.Envelope.Subject,
-		imapEmail.Envelope.Date,
-		"",
-		"",
-		"",
-		"",
-		0,
+		uid:         imapEmail.Uid,
+		folder:      getNormalizedImapFolderName(folder),
+		subject:     imapEmail.Envelope.Subject,
+		date:        imapEmail.Envelope.Date,
+		toAddress:   "",
+		fromAddress: "",
+		fromName:    "",
+		body:        "",
+		size:        0,
 	}
 
 	if len(imapEmail.Envelope.To) > 0 {
@@ -442,7 +462,17 @@ func appendImapEmailToUI(folder string, imapEmail *imap.Message) error {
 		email.fromName = imapEmail.Envelope.From[0].PersonalName
 	}
 
-	cachedEmailEnvelopeSet(&email)
-	insertImapEmailToList(email)
-	return nil
+	return &email
+}
+
+func getNormalizedImapFolderName(folder string) string {
+	if strings.ToLower(folder) == "inbox" {
+		return "Inbox"
+	}
+	return folder
+}
+
+func assertValidFolderName(folder string) {
+	Assert(strings.ToLower(folder) != "inbox" || folder == "Inbox",
+		"folder inbox has inconsistent casing of: %s, should be \"Inbox\"")
 }

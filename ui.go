@@ -13,7 +13,7 @@ func notifyFetchAllStarted(folder string, n int) {
 	g_ui.app.QueueUpdateDraw(func() {
 		g_ui.emailsList.Clear()
 		g_ui.emailsUidList = g_ui.emailsUidList[:0]
-		g_ui.folderSelected = folder
+		g_ui.folderSelected = getNormalizedImapFolderName(folder)
 		g_ui.folderItemCount = n
 		g_ui.emailsPegSelectionToTop = true
 		updateStatusBar(fmt.Sprintf("Retrieving %d emails from %s", n, folder))
@@ -199,13 +199,9 @@ func insertImapEmailToList(email Email) {
 	})
 }
 
-func insertFolderToList(mailbox string) {
+func insertFolderToList(folder string) {
 	g_ui.app.QueueUpdateDraw(func() {
-		if mailbox == "INBOX" {
-			mailbox = "Inbox"
-		}
-
-		g_ui.foldersList.AddItem(mailbox, "", 0,
-			func() { go fetchFolder(mailbox) })
+		g_ui.foldersList.AddItem(
+			getNormalizedImapFolderName(folder), "", 0, nil)
 	})
 }
