@@ -20,10 +20,12 @@ type UI struct {
 	previewText *tview.TextArea
 	previewUid  uint32
 
-	statusBar   *tview.TextView
-	columnsPane *tview.Flex
-	mainPane    *tview.Flex
-	emailsPane  *tview.Flex
+	hintsBar        *tview.TextView
+	hintsBarVisible bool
+	statusBar       *tview.TextView
+	columnsPane     *tview.Flex
+	mainPane        *tview.Flex
+	emailsPane      *tview.Flex
 }
 
 type MailConfig struct {

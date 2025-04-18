@@ -41,7 +41,13 @@ func main() {
 	g_ui.emailsStatusBar = tview.NewTextView()
 
 	g_ui.previewText = tview.NewTextArea()
+	g_ui.hintsBar = tview.NewTextView()
+	g_ui.hintsBar.SetDynamicColors(true)
+	g_ui.hintsBarVisible = true
+	setHintsBarText()
+
 	g_ui.statusBar = tview.NewTextView()
+	g_ui.statusBar.SetDynamicColors(true)
 
 	g_ui.foldersList.
 		SetHighlightFullLine(true).
@@ -67,14 +73,18 @@ func main() {
 		AddItem(g_ui.emailsList, 0, 10, true).
 		AddItem(g_ui.emailsStatusBar, 1, 0, false)
 
-	g_ui.columnsPane = tview.NewFlex().
-		SetDirection(tview.FlexColumn).
-		AddItem(g_ui.foldersList, 0, 1, false).
+	pane := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(g_ui.emailsPane, 0, 4, false).
 		AddItem(g_ui.previewText, 0, 5, false)
 
+	g_ui.columnsPane = tview.NewFlex().
+		SetDirection(tview.FlexColumn).
+		AddItem(g_ui.foldersList, 0, 2, false).
+		AddItem(pane, 0, 9, false)
+
 	g_ui.mainPane = tview.NewFlex().
 		SetDirection(tview.FlexRow).
+		AddItem(g_ui.hintsBar, 1, 0, false).
 		AddItem(g_ui.columnsPane, 0, 10, false).
 		AddItem(g_ui.statusBar, 1, 0, false)
 

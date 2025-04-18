@@ -19,6 +19,10 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 		mode = QuickReplyMode
 	}
 
+	if event.Key() == tcell.KeyRune && event.Rune() == 'h' {
+		toggleHintsBar()
+	}
+
 	inEmailsOrPreview := pane == g_ui.emailsList || pane == g_ui.previewText
 	if mode == PreviewMode && inEmailsOrPreview {
 		if (event.Key() == tcell.KeyRune && event.Rune() == 'r') ||

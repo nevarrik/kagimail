@@ -9,6 +9,12 @@ import (
 	"github.com/goodsign/monday"
 )
 
+const (
+	coShortcutText  = "#ffd369"
+	coHintText      = "#fb2576"
+	coStatusBarText = "#6eacda"
+)
+
 func notifyFetchAllStarted(folder string, n int) {
 	g_ui.app.QueueUpdateDraw(func() {
 		g_ui.emailsList.Clear()
@@ -150,11 +156,42 @@ func updateEmailStatusBar(text string) {
 }
 
 func updateStatusBar(text string) {
+	text = fmt.Sprintf("[%s] %s", coStatusBarText, text)
 	if IsOnUiThread() {
 		g_ui.statusBar.SetText(text)
 	} else {
 		g_ui.app.QueueUpdateDraw(func() { g_ui.statusBar.SetText(text) })
 	}
+}
+
+func setHintsBarText() {
+	hints := " _Reply _Compose _Quit [F5]:Refresh [Tab]:Move Focus _Hide"
+	var hintsRendered strings.Builder
+	for i := 0; i < len(hints); i++ {
+		if hints[i] == '_' {
+			hintsRendered.WriteString(fmt.Sprintf("[%s]", coShortcutText))
+			i += 1
+			hintsRendered.WriteByte(hints[i])
+			hintsRendered.WriteString(fmt.Sprintf("[%s]", coHintText))
+			continue
+		} else if hints[i] == '[' {
+			hintsRendered.WriteString(fmt.Sprintf("[%s]", coShortcutText))
+		} else if hints[i] == ']' {
+			hintsRendered.WriteString(fmt.Sprintf("[%s]", coHintText))
+		} else {
+			hintsRendered.WriteByte(hints[i])
+		}
+	}
+	g_ui.hintsBar.SetText(hintsRendered.String())
+}
+
+func toggleHintsBar() {
+	g_ui.hintsBarVisible = !g_ui.hintsBarVisible
+	height := 0
+	if g_ui.hintsBarVisible {
+		height = 1
+	}
+	g_ui.mainPane.ResizeItem(g_ui.hintsBar, height, 0)
 }
 
 func insertImapEmailToList(email Email) {
