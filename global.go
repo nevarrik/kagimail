@@ -4,8 +4,17 @@ import (
 	"github.com/rivo/tview"
 )
 
+const (
+	UIModeNormal = iota
+	UIModeQuickReply
+)
+
+type UIMode int
+
 type UI struct {
-	app         *tview.Application
+	app  *tview.Application
+	mode UIMode
+
 	foldersList *tview.List
 
 	emailsList      *tview.List

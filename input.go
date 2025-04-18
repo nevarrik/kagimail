@@ -4,43 +4,50 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-const (
-	PreviewMode = 1 << iota
-	QuickReplyMode
-	ReplyMode
-)
-
 func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 	pane := g_ui.app.GetFocus()
-	mode := 0
-	if g_ui.previewText.GetTitle() == "Preview" {
-		mode = PreviewMode
-	} else if g_ui.previewText.GetTitle() == "Quick Reply" {
-		mode = QuickReplyMode
-	}
+	mode := g_ui.mode
 
-	if event.Key() == tcell.KeyRune && event.Rune() == 'h' {
-		toggleHintsBar()
-	}
+	allowSingleKeys := mode != UIModeQuickReply
+	if allowSingleKeys && event.Key() == tcell.KeyRune {
+		if event.Key() == tcell.KeyRune {
+			switch event.Rune() {
+			case 'r':
+				if g_ui.previewUid != 0 {
+					setUIMode(UIModeQuickReply)
+					previewPaneSetReply()
+					g_ui.app.SetFocus(g_ui.previewText)
+				} else {
+					updateStatusBar("No message selected to reply to")
+				}
+				return nil
 
-	inEmailsOrPreview := pane == g_ui.emailsList || pane == g_ui.previewText
-	if mode == PreviewMode && inEmailsOrPreview {
-		if (event.Key() == tcell.KeyRune && event.Rune() == 'r') ||
-			event.Key() == tcell.KeyCtrlR {
-			previewPaneSetReply()
-			return nil
+			case 'h':
+				toggleHintsBar()
+				return nil
+
+			case 'q':
+				g_ui.app.Stop()
+				return nil
+			}
 		}
+	}
 
+	if mode == UIModeQuickReply && pane == g_ui.previewText {
 		switch event.Key() {
-		}
-	}
-
-	if mode == QuickReplyMode && inEmailsOrPreview {
-		if event.Key() == tcell.KeyCtrlJ { // this is sent on ^enter
+		case tcell.KeyCtrlJ: // this is sent on ^enter
 			email := cachedEmailFromUid(
 				g_ui.folderSelected, g_ui.previewUid)
 			replyEmail(email, g_ui.previewText.GetText())
+			setUIMode(UIModeNormal)
+			g_ui.previewText.SetText("", false)
+			g_ui.app.SetFocus(g_ui.emailsList)
+			return nil
 
+		case tcell.KeyEscape:
+			setUIMode(UIModeNormal)
+			g_ui.previewText.SetText("", false)
+			g_ui.app.SetFocus(g_ui.emailsList)
 			return nil
 		}
 	}
@@ -59,8 +66,6 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 	}
 
 	switch event.Key() {
-	case tcell.KeyEscape:
-		fallthrough
 	case tcell.KeyCtrlC:
 		fallthrough
 	case tcell.KeyCtrlQ:

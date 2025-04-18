@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"gopkg.in/mail.v2"
 )
@@ -36,7 +37,9 @@ func smtpWorker() {
 				break
 			}
 
-			updateStatusBar(fmt.Sprintf("Email sent to: %s", email.toAddress))
+			formattedTime := time.Now().Format(time.Stamp)
+			updateStatusBar(fmt.Sprintf(
+				"Email sent to: %s at %s", email.toAddress, formattedTime))
 		}
 	}
 }

@@ -17,11 +17,17 @@ const (
 
 func notifyFetchAllStarted(folder string, n int) {
 	g_ui.app.QueueUpdateDraw(func() {
+		folder := getNormalizedImapFolderName(folder)
+		if g_ui.folderSelected == folder {
+			return
+		}
 		g_ui.emailsList.Clear()
 		g_ui.emailsUidList = g_ui.emailsUidList[:0]
-		g_ui.folderSelected = getNormalizedImapFolderName(folder)
+		g_ui.folderSelected = folder
 		g_ui.folderItemCount = n
 		g_ui.emailsPegSelectionToTop = true
+		g_ui.previewUid = 0
+		g_ui.previewText.SetTitle("Preview")
 		updateStatusBar(fmt.Sprintf("Retrieving %d emails from %s", n, folder))
 	})
 }
@@ -91,43 +97,36 @@ func previewPaneSetBody(id uint32, body string) {
 }
 
 func previewPaneSetReply() {
-	g_ui.previewText.SetTitle("Quick Reply")
+	Assert(g_ui.previewUid != 0, "no preview message selected")
+	Assert(g_ui.mode == UIModeQuickReply, "not in quick reply mode")
+
+	email := cachedEmailFromUid(g_ui.folderSelected, g_ui.previewUid)
+
+	var formattedDate string
+	{ // get localized date/time formats
+		userLocale, err := jibber_jabber.DetectLanguage()
+		if err != nil {
+			userLocale = "en_US"
+		}
+		locale := monday.Locale(userLocale)
+		longDateFormat, ok := monday.FullFormatsByLocale[locale]
+		if !ok {
+			longDateFormat = monday.DefaultFormatEnUSFull
+		}
+		longTimeFormat, ok := monday.TimeFormatsByLocale[locale]
+		if !ok {
+			longTimeFormat = monday.DefaultFormatEnUSTime
+		}
+
+		formattedDate = monday.Format(
+			email.date, longDateFormat+" "+longTimeFormat, locale)
+	}
+
+	var reply strings.Builder
+	reply.WriteString(
+		fmt.Sprintf("\n\nOn %s %s wrote:\n", formattedDate, email.fromName))
 
 	originalText := g_ui.previewText.GetText()
-	var reply strings.Builder
-
-	userLocale, err := jibber_jabber.DetectLanguage()
-	if err != nil {
-		userLocale = "en_US"
-	}
-
-	locale := monday.Locale(userLocale)
-	longDateFormat, ok := monday.FullFormatsByLocale[locale]
-	if !ok {
-		longDateFormat = monday.DefaultFormatEnUSFull
-	}
-
-	longTimeFormat, ok := monday.TimeFormatsByLocale[locale]
-	if !ok {
-		longTimeFormat = monday.DefaultFormatEnUSTime
-	}
-
-	email := cachedEmailFromUid(
-		g_ui.folderSelected,
-		g_ui.previewUid,
-	)
-	reply.WriteString(
-		fmt.Sprintf(
-			"On %s %s wrote:\n",
-			monday.Format(
-				email.date,
-				longDateFormat+" "+longTimeFormat,
-				locale,
-			),
-			email.fromName,
-		),
-	)
-
 	for _, line := range strings.Split(originalText, "\n") {
 		line = ">" + line
 		reply.WriteString(line + "\n")
@@ -165,7 +164,14 @@ func updateStatusBar(text string) {
 }
 
 func setHintsBarText() {
-	hints := " _Reply _Compose _Quit [F5]:Refresh [Tab]:Move Focus _Hide"
+	var hints string
+	if g_ui.mode == UIModeNormal {
+		hints = " _Compose _Reply _Forward |"
+		hints += " _Quit [F5]:Refresh [Tab]:Move Focus _Hide"
+	} else if g_ui.mode == UIModeQuickReply {
+		hints = " [Ctrl+Enter]:Send | [Esc]:Discard"
+	}
+
 	var hintsRendered strings.Builder
 	for i := 0; i < len(hints); i++ {
 		if hints[i] == '_' {
@@ -174,6 +180,8 @@ func setHintsBarText() {
 			hintsRendered.WriteByte(hints[i])
 			hintsRendered.WriteString(fmt.Sprintf("[%s]", coHintText))
 			continue
+		} else if hints[i] == '|' {
+			hintsRendered.WriteString(fmt.Sprintf("[white]|[%s]", coHintText))
 		} else if hints[i] == '[' {
 			hintsRendered.WriteString(fmt.Sprintf("[%s]", coShortcutText))
 		} else if hints[i] == ']' {
@@ -248,4 +256,20 @@ func insertFolderToList(folder string) {
 		g_ui.foldersList.AddItem(
 			getNormalizedImapFolderName(folder), "", 0, nil)
 	})
+}
+
+func setUIMode(mode UIMode) {
+	Assert(IsOnUiThread(), "won't work unless called from ui thread")
+	if g_ui.mode == mode {
+		return
+	}
+
+	g_ui.mode = mode
+	if g_ui.mode == UIModeNormal {
+		g_ui.previewText.SetTitle("Preview")
+	} else if g_ui.mode == UIModeQuickReply {
+		g_ui.previewText.SetTitle("Quick Reply")
+	}
+
+	setHintsBarText()
 }
