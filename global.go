@@ -7,14 +7,18 @@ import (
 const (
 	UIModeNormal = iota
 	UIModeQuickReply
+	UIModeCompose
 )
 
 type UIMode int
 
 type UI struct {
-	app  *tview.Application
-	mode UIMode
+	app   *tview.Application
+	mode  UIMode
+	pages *tview.Pages
 
+	// main pane
+	//
 	foldersList *tview.List
 
 	emailsList      *tview.List
@@ -35,6 +39,11 @@ type UI struct {
 	columnsPane     *tview.Flex
 	mainPane        *tview.Flex
 	emailsPane      *tview.Flex
+
+	// compose pane
+	//
+	composePane *tview.Flex
+	composeForm *tview.Form
 }
 
 type MailConfig struct {

@@ -170,6 +170,8 @@ func setHintsBarText() {
 		hints += " _Quit [F5]:Refresh [Tab]:Move Focus _Hide"
 	} else if g_ui.mode == UIModeQuickReply {
 		hints = " [Ctrl+Enter]:Send | [Esc]:Discard"
+	} else if g_ui.mode == UIModeCompose {
+		hints = " [Ctrl+Enter]:Send | [Esc]:Discard"
 	}
 
 	var hintsRendered strings.Builder
@@ -269,6 +271,14 @@ func setUIMode(mode UIMode) {
 		g_ui.previewText.SetTitle("Preview")
 	} else if g_ui.mode == UIModeQuickReply {
 		g_ui.previewText.SetTitle("Quick Reply")
+	}
+
+	if g_ui.mode == UIModeCompose {
+		g_ui.pages.SwitchToPage("compose")
+		g_ui.app.SetFocus(g_ui.composeForm)
+	} else {
+		g_ui.pages.SwitchToPage("main")
+		g_ui.app.SetFocus(g_ui.emailsList)
 	}
 
 	setHintsBarText()

@@ -2,13 +2,14 @@ package main
 
 import (
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 	pane := g_ui.app.GetFocus()
 	mode := g_ui.mode
 
-	allowSingleKeys := mode != UIModeQuickReply
+	allowSingleKeys := mode == UIModeNormal
 	if allowSingleKeys && event.Key() == tcell.KeyRune {
 		if event.Key() == tcell.KeyRune {
 			switch event.Rune() {
@@ -24,6 +25,10 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 
 			case 'h':
 				toggleHintsBar()
+				return nil
+
+			case 'c':
+				setUIMode(UIModeCompose)
 				return nil
 
 			case 'q':
@@ -52,6 +57,27 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 		}
 	}
 
+	if mode == UIModeCompose {
+		switch event.Key() {
+		case tcell.KeyCtrlJ:
+			fnGetFormItem := g_ui.composeForm.GetFormItem
+			email := Email{
+				toAddress: fnGetFormItem(0).(*tview.InputField).GetText(),
+				ccAddress: fnGetFormItem(1).(*tview.InputField).GetText(),
+				subject:   fnGetFormItem(2).(*tview.InputField).GetText(),
+				body:      fnGetFormItem(3).(*tview.TextArea).GetText(),
+			}
+			setUIMode(UIModeNormal)
+			composeEmail(email)
+
+			fnGetFormItem(0).(*tview.InputField).SetText("")
+			fnGetFormItem(1).(*tview.InputField).SetText("")
+			fnGetFormItem(2).(*tview.InputField).SetText("")
+			fnGetFormItem(3).(*tview.TextArea).SetText("", true)
+		}
+	}
+
+	// peg selections to top workaround
 	if pane == g_ui.emailsList {
 		switch event.Key() {
 		case tcell.KeyUp,
@@ -65,36 +91,42 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 		}
 	}
 
+	// global keys
 	switch event.Key() {
 	case tcell.KeyCtrlC:
 		fallthrough
 	case tcell.KeyCtrlQ:
 		g_ui.app.Stop()
 		return nil
+	}
 
-	case tcell.KeyTab:
-		if pane == g_ui.foldersList {
-			g_ui.app.SetFocus(g_ui.emailsList)
-		} else if pane == g_ui.emailsList {
-			g_ui.app.SetFocus(g_ui.previewText)
-		} else if pane == g_ui.previewText {
-			g_ui.app.SetFocus(g_ui.foldersList)
-		} else {
-			AssertNotReachable("coming from a control we don't know about")
-		}
-		return nil
+	// focus moving tabbing keys
+	if mode == UIModeNormal {
+		switch event.Key() {
+		case tcell.KeyTab:
+			if pane == g_ui.foldersList {
+				g_ui.app.SetFocus(g_ui.emailsList)
+			} else if pane == g_ui.emailsList {
+				g_ui.app.SetFocus(g_ui.previewText)
+			} else if pane == g_ui.previewText {
+				g_ui.app.SetFocus(g_ui.foldersList)
+			} else {
+				AssertNotReachable("coming from a control we don't know about")
+			}
+			return nil
 
-	case tcell.KeyBacktab:
-		if pane == g_ui.foldersList {
-			g_ui.app.SetFocus(g_ui.previewText)
-		} else if pane == g_ui.emailsList {
-			g_ui.app.SetFocus(g_ui.foldersList)
-		} else if pane == g_ui.previewText {
-			g_ui.app.SetFocus(g_ui.emailsList)
-		} else {
-			AssertNotReachable("coming from a control we don't know about")
+		case tcell.KeyBacktab:
+			if pane == g_ui.foldersList {
+				g_ui.app.SetFocus(g_ui.previewText)
+			} else if pane == g_ui.emailsList {
+				g_ui.app.SetFocus(g_ui.foldersList)
+			} else if pane == g_ui.previewText {
+				g_ui.app.SetFocus(g_ui.emailsList)
+			} else {
+				AssertNotReachable("coming from a control we don't know about")
+			}
+			return nil
 		}
-		return nil
 	}
 
 	return event

@@ -88,8 +88,27 @@ func main() {
 		AddItem(g_ui.columnsPane, 0, 10, false).
 		AddItem(g_ui.statusBar, 1, 0, false)
 
+	g_ui.pages = tview.NewPages()
+	g_ui.pages.AddPage("main", g_ui.mainPane, true, true)
+
+	g_ui.composeForm = tview.NewForm()
+	g_ui.composeForm.
+		SetBorder(true).
+		SetTitle("Compose").
+		SetTitleAlign(tview.AlignLeft)
+	g_ui.composeForm.AddInputField("To:", "", 0, nil, nil)
+	g_ui.composeForm.AddInputField("Cc:", "", 0, nil, nil)
+	g_ui.composeForm.AddInputField("Subject:", "", 0, nil, nil)
+	g_ui.composeForm.AddTextArea("Message:", "", 0, 12, 0, nil)
+
+	g_ui.composePane = tview.NewFlex()
+	g_ui.composePane.SetDirection(tview.FlexRow).
+		AddItem(g_ui.hintsBar, 1, 0, false).
+		AddItem(g_ui.composeForm, 0, 1, true)
+	g_ui.pages.AddPage("compose", g_ui.composePane, true, false)
+
 	g_ui.app.SetInputCapture(KeyHandler)
-	g_ui.app.SetRoot(g_ui.mainPane, true)
+	g_ui.app.SetRoot(g_ui.pages, true)
 	g_ui.app.SetFocus(g_ui.emailsList)
 
 	go imapInit()

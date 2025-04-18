@@ -15,6 +15,7 @@ type Email struct {
 	subject     string
 	date        time.Time
 	toAddress   string
+	ccAddress   string
 	fromAddress string
 	fromName    string
 	body        string

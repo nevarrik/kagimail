@@ -19,13 +19,15 @@ func smtpWorker() {
 	for {
 		select {
 		case email := <-chSendMails:
-			Require(email.uid != 0, "requires id")
 			msg := mail.NewMessage()
 			msg.SetHeader(
 				"From",
 				msg.FormatAddress(email.fromAddress, email.fromName),
 			)
 			msg.SetHeader("To", email.toAddress)
+			if email.ccAddress != "" {
+				msg.SetHeader("Cc", email.ccAddress)
+			}
 			msg.SetHeader("Subject", email.subject)
 			msg.SetBody("text/plain", email.body)
 
@@ -45,6 +47,7 @@ func smtpWorker() {
 }
 
 func replyEmail(emailOriginal Email, body string) {
+	Require(emailOriginal.uid != 0, "requires id")
 	email_ := emailOriginal
 	email_.body = body
 	email_.toAddress = emailOriginal.fromAddress
@@ -56,6 +59,12 @@ func replyEmail(emailOriginal Email, body string) {
 	}
 	email_.subject = subject
 	sendEmail(email_)
+}
+
+func composeEmail(email Email) {
+	email.fromAddress = g_config.Email
+	email.fromName = g_config.DisplayName
+	sendEmail(email)
 }
 
 func sendEmail(email Email) {
