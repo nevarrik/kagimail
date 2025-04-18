@@ -156,7 +156,7 @@ func imapFetchViaCriteria(
 		Assert(loWater >= 1, "0 isn't the first mail in imap, use 1")
 
 		searchChunkSize := 100
-		for hi := hiWater; hi > 0; hi -= searchChunkSize {
+		for hi := hiWater; hi > loWater; hi -= searchChunkSize {
 			lo := hi - searchChunkSize
 			lo = max(loWater, lo+1)
 			if flags&fetchAllEmailsInFolder != 0 {
