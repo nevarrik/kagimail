@@ -125,6 +125,8 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 			} else {
 				AssertNotReachable("coming from a control we don't know about")
 			}
+
+			onFocusChange()
 			return nil
 
 		case tcell.KeyBacktab:
@@ -137,6 +139,8 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 			} else {
 				AssertNotReachable("coming from a control we don't know about")
 			}
+
+			onFocusChange()
 			return nil
 		}
 	}

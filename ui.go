@@ -11,15 +11,20 @@ import (
 )
 
 const (
-	coShortcutText       = "#ffd369"
-	coHintText           = "#6c5edc"
-	coMainStatusBarText  = "#ffd369"
-	coEmailStatusBarText = "#ffd369"
+	coKagiYellow = "#ffd369"
+	coKagiPurple = "#6c5edc"
+
+	coShortcutText       = coKagiYellow
+	coHintText           = coKagiPurple
+	coMainStatusBarText  = coKagiYellow
+	coEmailStatusBarText = coKagiYellow
 	coEmailUnread        = "#cccccc"
 	coEmailRead          = "#5c5470"
 
-	coSelection     = "#ffd369"
-	coSelectionText = "#000000"
+	coSelectionFocused      = coKagiPurple
+	coSelectionTextFocused  = "#000000"
+	coSelectionInactive     = "#bbbbbb"
+	coSelectionTextInactive = "#000000"
 )
 
 func notifyFetchAllStarted(folder string, n int) {
@@ -319,7 +324,8 @@ func setUIMode(mode UIMode) {
 	if g_ui.mode == UIModeNormal {
 		g_ui.previewText.SetTitle("Preview")
 	} else if g_ui.mode == UIModeQuickReply {
-		g_ui.previewText.SetTitle("Quick Reply")
+		email := cachedEmailFromUid(g_ui.folderSelected, g_ui.previewUid)
+		g_ui.previewText.SetTitle("Replying to " + email.fromName)
 	}
 
 	if g_ui.mode == UIModeCompose {
@@ -330,5 +336,51 @@ func setUIMode(mode UIMode) {
 		g_ui.app.SetFocus(g_ui.emailsTable)
 	}
 
+	onFocusChange()
 	setHintsBarText()
+}
+
+func onFocusChange() {
+	Assert(IsOnUiThread(), "won't work unless called from ui thread")
+
+	makeSelectionStyle := func(coBk, coFg string) tcell.Style {
+		return tcell.StyleDefault.
+			Background(tcell.GetColor(coBk)).
+			Foreground(tcell.GetColor(coFg))
+	}
+
+	selectionStyleFocused := makeSelectionStyle(
+		coSelectionFocused, coSelectionTextFocused)
+	selectionStyleInactive := makeSelectionStyle(
+		coSelectionInactive, coSelectionTextInactive)
+	coBorderFocused := tcell.GetColor(coSelectionFocused)
+	coBorderInactive := tcell.GetColor(coSelectionInactive)
+
+	emailsSelectionStyle := selectionStyleFocused
+	if !g_ui.emailsTable.HasFocus() {
+		emailsSelectionStyle = selectionStyleInactive
+	}
+
+	foldersSelectionStyle := selectionStyleFocused
+	foldersBorderColor := coBorderFocused
+	if !g_ui.foldersList.HasFocus() {
+		foldersBorderColor = coBorderInactive
+		foldersSelectionStyle = selectionStyleInactive
+	}
+
+	previewBorderColor := coBorderFocused
+	if !g_ui.previewText.HasFocus() {
+		previewBorderColor = coBorderInactive
+	}
+
+	g_ui.emailsTable.SetSelectedStyle(emailsSelectionStyle)
+
+	g_ui.foldersList.SetBorderColor(foldersBorderColor)
+	g_ui.foldersList.SetTitleColor(foldersBorderColor)
+	g_ui.foldersList.SetSelectedStyle(foldersSelectionStyle)
+
+	g_ui.previewText.SetBorderColor(previewBorderColor)
+	g_ui.previewText.SetTitleColor(previewBorderColor)
+
+	g_ui.app.ForceDraw()
 }

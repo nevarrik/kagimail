@@ -4,7 +4,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
@@ -34,12 +33,6 @@ func main() {
 	g_ui.emailsTable = tview.NewTable()
 	g_ui.emailsTable.SetSelectable(true, false)
 	g_ui.emailsTable.SetSelectionChangedFunc(onEmailsTableSelectionChange)
-
-	g_ui.emailsTable.SetSelectedStyle(
-		tcell.StyleDefault.
-			Background(tcell.GetColor(coSelection)).
-			Foreground(tcell.GetColor(coSelectionText)),
-	)
 
 	g_ui.previewText = tview.NewTextArea()
 	g_ui.hintsBar = tview.NewTextView()
@@ -102,6 +95,7 @@ func main() {
 
 	g_ui.app.SetRoot(g_ui.pages, true)
 	g_ui.app.SetFocus(g_ui.emailsTable)
+	onFocusChange()
 
 	go imapInit()
 	go smtpInit()
