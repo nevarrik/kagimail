@@ -209,7 +209,7 @@ func imapFetchViaCriteria(
 			chEmails := make(chan *imap.Message, fetchChunkSize)
 			chFetchDone := make(chan error, 1)
 			go func() {
-				fi := []imap.FetchItem{imap.FetchUid}
+				fi := []imap.FetchItem{imap.FetchUid, imap.FetchFlags}
 				if flags&fetchEmailBodyViaUID != 0 {
 					section := &imap.BodySectionName{
 						Peek: false,
@@ -269,19 +269,29 @@ func imapWorker() {
 	go func() {
 		cltDownloadBody := imapLogin()
 		defer cltDownloadBody.Logout()
+
+		var reqLast FetchEmailBodyRequest
 		for {
 			select {
-			case req := <-chFetchEmailBody:
+			case req := <-chFetchEmailBody: // drain channel, use latest
+				reqLast = req
+
+			default:
+				if reqLast.uid == 0 {
+					continue
+				}
+
 				criteria := imap.NewSearchCriteria()
 				criteria.Uid = new(imap.SeqSet)
-				criteria.Uid.AddNum(req.uid)
+				criteria.Uid.AddNum(reqLast.uid)
 				imapFetchViaCriteria(
 					cltDownloadBody,
-					req.folder,
+					reqLast.folder,
 					criteria,
-					req.done,
+					reqLast.done,
 					fetchEmailBodyViaUID,
 				)
+				reqLast = FetchEmailBodyRequest{}
 			}
 		}
 	}()
@@ -364,6 +374,14 @@ func imapWorker() {
 						continue
 					}
 
+					mailbox, err := cltUpdates.Select(folder, true)
+					if err != nil {
+						updateStatusBar(fmt.Sprintf(
+							"Unable update mailbox \"%s\": %v", folder, err))
+						continue
+					}
+					notifyFetchLatestStarted(folder, int(mailbox.Messages))
+
 					criteria := imap.NewSearchCriteria()
 					criteria.SeqNum = new(imap.SeqSet)
 					criteria.SeqNum.AddRange(emailsInStore+1, emailsAvailable)
@@ -371,7 +389,7 @@ func imapWorker() {
 					imapFetchViaCriteria(
 						cltUpdates, folder, criteria, done, fetchLatestEmails)
 
-					err := <-done
+					err = <-done
 					Assert(cachedEmailFromFolderItemCount(folder) ==
 						int(emailsAvailable),
 						"email count not matching mailbox update count")
@@ -379,6 +397,7 @@ func imapWorker() {
 					if err != nil {
 						updateStatusBar(fmt.Sprintf(
 							"Unable update mailbox \"%s\": %v", folder, err))
+						continue
 					}
 
 				case *client.MessageUpdate:
@@ -465,6 +484,14 @@ func updateEmailBody(folder string, imapEmail *imap.Message) error {
 }
 
 func emailFromImapEmail(folder string, imapEmail *imap.Message) *Email {
+	var seenFlag bool
+	for _, flag := range imapEmail.Flags {
+		if flag == imap.SeenFlag {
+			seenFlag = true
+			break
+		}
+	}
+
 	email := Email{
 		uid:         imapEmail.Uid,
 		seqNum:      imapEmail.SeqNum,
@@ -476,6 +503,7 @@ func emailFromImapEmail(folder string, imapEmail *imap.Message) *Email {
 		fromName:    "",
 		body:        "",
 		size:        0,
+		isRead:      seenFlag,
 	}
 
 	if len(imapEmail.Envelope.To) > 0 {

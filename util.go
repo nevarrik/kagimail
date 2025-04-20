@@ -14,6 +14,13 @@ func Assert(condition bool, msg string) {
 	}
 }
 
+func Assume(condition bool, msg string) {
+	if !condition {
+		log.Print("Assume failed: ", msg)
+		panic(msg)
+	}
+}
+
 func AssertNotReachable(msg string) {
 	panic(msg)
 }

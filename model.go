@@ -20,6 +20,7 @@ type Email struct {
 	fromName    string
 	body        string
 	size        uint64
+	isRead      bool
 }
 
 var (

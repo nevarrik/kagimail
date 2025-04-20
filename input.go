@@ -46,13 +46,13 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 			replyEmail(email, g_ui.previewText.GetText())
 			setUIMode(UIModeNormal)
 			g_ui.previewText.SetText("", false)
-			g_ui.app.SetFocus(g_ui.emailsList)
+			g_ui.app.SetFocus(g_ui.emailsTable)
 			return nil
 
 		case tcell.KeyEscape:
 			setUIMode(UIModeNormal)
 			g_ui.previewText.SetText("", false)
-			g_ui.app.SetFocus(g_ui.emailsList)
+			g_ui.app.SetFocus(g_ui.emailsTable)
 			return nil
 		}
 	}
@@ -74,11 +74,16 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 			fnGetFormItem(1).(*tview.InputField).SetText("")
 			fnGetFormItem(2).(*tview.InputField).SetText("")
 			fnGetFormItem(3).(*tview.TextArea).SetText("", true)
+			return nil
+
+		case tcell.KeyEsc:
+			setUIMode(UIModeNormal)
+			return nil
 		}
 	}
 
 	// peg selections to top workaround
-	if pane == g_ui.emailsList {
+	if pane == g_ui.emailsTable {
 		switch event.Key() {
 		case tcell.KeyUp,
 			tcell.KeyDown,
@@ -105,8 +110,8 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab:
 			if pane == g_ui.foldersList {
-				g_ui.app.SetFocus(g_ui.emailsList)
-			} else if pane == g_ui.emailsList {
+				g_ui.app.SetFocus(g_ui.emailsTable)
+			} else if pane == g_ui.emailsTable {
 				g_ui.app.SetFocus(g_ui.previewText)
 			} else if pane == g_ui.previewText {
 				g_ui.app.SetFocus(g_ui.foldersList)
@@ -118,10 +123,10 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 		case tcell.KeyBacktab:
 			if pane == g_ui.foldersList {
 				g_ui.app.SetFocus(g_ui.previewText)
-			} else if pane == g_ui.emailsList {
+			} else if pane == g_ui.emailsTable {
 				g_ui.app.SetFocus(g_ui.foldersList)
 			} else if pane == g_ui.previewText {
-				g_ui.app.SetFocus(g_ui.emailsList)
+				g_ui.app.SetFocus(g_ui.emailsTable)
 			} else {
 				AssertNotReachable("coming from a control we don't know about")
 			}

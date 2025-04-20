@@ -3,16 +3,23 @@ package main
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/cloudfoundry/jibber_jabber"
+	"github.com/gdamore/tcell/v2"
 	"github.com/goodsign/monday"
+	"github.com/rivo/tview"
 )
 
 const (
-	coShortcutText  = "#ffd369"
-	coHintText      = "#fb2576"
-	coStatusBarText = "#6eacda"
+	coShortcutText       = "#ffd369"
+	coHintText           = "#6c5edc"
+	coMainStatusBarText  = "#ffd369"
+	coEmailStatusBarText = "#ffd369"
+	coEmailUnread        = "#cccccc"
+	coEmailRead          = "#5c5470"
+
+	coSelection     = "#ffd369"
+	coSelectionText = "#000000"
 )
 
 func notifyFetchAllStarted(folder string, n int) {
@@ -21,7 +28,7 @@ func notifyFetchAllStarted(folder string, n int) {
 		if g_ui.folderSelected == folder {
 			return
 		}
-		g_ui.emailsList.Clear()
+		g_ui.emailsTable.Clear()
 		g_ui.emailsUidList = g_ui.emailsUidList[:0]
 		g_ui.folderSelected = folder
 		g_ui.folderItemCount = n
@@ -40,7 +47,7 @@ func notifyFetchAllFinished(err error, folder string) {
 	}
 
 	g_ui.app.QueueUpdateDraw(func() {
-		if g_ui.emailsList.GetItemCount() == g_ui.folderItemCount {
+		if g_ui.emailsTable.GetRowCount() == g_ui.folderItemCount {
 			updateEmailStatusBar(fmt.Sprintf(
 				"Folder up to date with %d emails", g_ui.folderItemCount))
 		}
@@ -88,11 +95,12 @@ func notifyFetchEmailBodyFinished(
 	previewPaneSetBody(uid, body)
 }
 
-func previewPaneSetBody(id uint32, body string) {
+func previewPaneSetBody(uid uint32, body string) {
 	g_ui.app.QueueUpdateDraw(func() {
-		g_ui.previewUid = id
-		g_ui.previewText.SetTitle("Preview")
-		g_ui.previewText.SetText(body, false)
+		folder := g_ui.folderSelected
+		if g_ui.previewUid == uid {
+			g_ui.previewText.SetText(body, false)
+		}
 	})
 }
 
@@ -136,26 +144,46 @@ func previewPaneSetReply() {
 }
 
 func updateEmailStatusBarWithSelection() {
-	k := g_ui.emailsList.GetCurrentItem()
+	if g_ui.folderItemCount == 0 {
+		updateEmailStatusBar("Empty folder")
+		return
+	}
+
+	k, _ := g_ui.emailsTable.GetSelection()
 	updateEmailStatusBar(fmt.Sprintf(
-		"Email %d of %d [%d] (ItemCount=%d)",
-		k+1,
-		g_ui.folderItemCount,
-		g_ui.emailsUidList[k],
-		g_ui.emailsList.GetItemCount(),
+		"Email %d of %d", k+1, g_ui.emailsTable.GetRowCount(),
 	))
 }
 
 func updateEmailStatusBar(text string) {
+	setFrameText := func(text string) {
+		co := tcell.GetColor(coEmailStatusBarText)
+		g_ui.emailsFrame.Clear().
+			AddText("↑↓:Navigate", false, tview.AlignLeft, co).
+			AddText(text, false, tview.AlignRight, co)
+	}
 	if IsOnUiThread() {
-		g_ui.emailsStatusBar.SetText(text)
+		setFrameText(text)
 	} else {
-		g_ui.app.QueueUpdateDraw(func() { g_ui.emailsStatusBar.SetText(text) })
+		g_ui.app.QueueUpdateDraw(func() { setFrameText(text) })
 	}
 }
 
+func onEmailsTableSelectionChange(row int, col int) {
+	updateEmailStatusBarWithSelection()
+
+	folder := g_ui.folderSelected
+	uid := g_ui.emailsUidList[row]
+	if g_ui.previewUid == uid {
+		return
+	}
+	g_ui.previewUid = uid
+	g_ui.previewText.SetTitle("Preview")
+	go fetchEmailBody(g_ui.folderSelected, uid)
+}
+
 func updateStatusBar(text string) {
-	text = fmt.Sprintf("[%s] %s", coStatusBarText, text)
+	text = fmt.Sprintf("[%s] %s", coMainStatusBarText, text)
 	if IsOnUiThread() {
 		g_ui.statusBar.SetText(text)
 	} else {
@@ -201,7 +229,7 @@ func toggleHintsBar() {
 	if g_ui.hintsBarVisible {
 		height = 1
 	}
-	g_ui.mainPane.ResizeItem(g_ui.hintsBar, height, 0)
+	g_ui.emailsPane.ResizeItem(g_ui.hintsBar, height, 0)
 }
 
 func insertImapEmailToList(email Email) {
@@ -220,34 +248,46 @@ func insertImapEmailToList(email Email) {
 		g_ui.emailsUidList = append(g_ui.emailsUidList, 0)
 		copy(g_ui.emailsUidList[i+1:], g_ui.emailsUidList[i:])
 		g_ui.emailsUidList[i] = email.uid
-		// insert into ui
-		secondaryLine := fmt.Sprintf("%s from: %s",
-			email.date.Format(time.Stamp), email.fromAddress)
-		g_ui.emailsList.InsertItem(
-			i, email.subject, secondaryLine, 0, nil)
 
-		Assert(len(g_ui.emailsUidList) == g_ui.emailsList.GetItemCount(), "")
+		// insert into table
+		g_ui.emailsTable.InsertRow(i)
+		co := coEmailUnread
+		if email.isRead {
+			co = coEmailRead
+		}
+		setCell := func(y int, x int, text string) {
+			_, _, totalWidth, _ := g_ui.emailsTable.GetRect()
+			width := []int{20, totalWidth - 20}[x]
+			cell := tview.NewTableCell(text).
+				SetTextColor(tcell.GetColor(co)).
+				SetMaxWidth(width)
+			g_ui.emailsTable.SetCell(y, x, cell)
+		}
+		setCell(i, 0, email.fromName)
+		setCell(i, 1, email.subject)
+
+		Assert(len(g_ui.emailsUidList) == g_ui.emailsTable.GetRowCount(), "")
 
 		// when initially loading before keyboard input, keep top item selected
 		// (items might not be inserted into ui in correct order, but our first
 		// insert will set the selected item--which might then move down
 		if g_ui.emailsPegSelectionToTop {
-			g_ui.emailsList.SetCurrentItem(0)
+			g_ui.emailsTable.Select(0, 0)
 		}
 
 		// update statusbar
-		if g_ui.emailsList.GetItemCount() == g_ui.folderItemCount {
+		if g_ui.emailsTable.GetRowCount() == g_ui.folderItemCount {
 			updateEmailStatusBar(fmt.Sprintf(
 				"Folder up to date with %d emails", g_ui.folderItemCount))
 		} else {
 			updateEmailStatusBar(
-				fmt.Sprintf("Downloading %d emails", g_ui.folderItemCount-g_ui.emailsList.GetItemCount()))
+				fmt.Sprintf("Downloading %d emails", g_ui.folderItemCount-g_ui.emailsTable.GetRowCount()))
 		}
 	})
 }
 
 func removeEmailFromList(i int) {
-	g_ui.emailsList.RemoveItem(i)
+	g_ui.emailsTable.RemoveRow(i)
 	g_ui.emailsUidList = append(
 		g_ui.emailsUidList[:i],
 		g_ui.emailsUidList[i+1:]...)
@@ -278,7 +318,7 @@ func setUIMode(mode UIMode) {
 		g_ui.app.SetFocus(g_ui.composeForm)
 	} else {
 		g_ui.pages.SwitchToPage("main")
-		g_ui.app.SetFocus(g_ui.emailsList)
+		g_ui.app.SetFocus(g_ui.emailsTable)
 	}
 
 	setHintsBarText()

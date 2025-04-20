@@ -21,9 +21,9 @@ type UI struct {
 	//
 	foldersList *tview.List
 
-	emailsList      *tview.List
+	emailsFrame     *tview.Frame
+	emailsTable     *tview.Table
 	emailsUidList   []uint32
-	emailsStatusBar *tview.TextView
 	folderSelected  string
 	folderItemCount int
 	// we set this when we begin downloading all emails from a folder, to keep

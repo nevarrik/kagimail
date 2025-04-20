@@ -31,14 +31,15 @@ func main() {
 		},
 	)
 
-	g_ui.emailsList = tview.NewList()
-	g_ui.emailsList.SetWrapAround(false)
-	g_ui.emailsList.SetChangedFunc(
-		func(int, string, string, rune) { updateEmailStatusBarWithSelection() })
-	g_ui.emailsList.SetSelectedFunc(func(k int, _ string, _ string, _ rune) {
-		go fetchEmailBody(g_ui.folderSelected, g_ui.emailsUidList[k])
-	})
-	g_ui.emailsStatusBar = tview.NewTextView()
+	g_ui.emailsTable = tview.NewTable()
+	g_ui.emailsTable.SetSelectable(true, false)
+	g_ui.emailsTable.SetSelectionChangedFunc(onEmailsTableSelectionChange)
+
+	g_ui.emailsTable.SetSelectedStyle(
+		tcell.StyleDefault.
+			Background(tcell.GetColor(coSelection)).
+			Foreground(tcell.GetColor(coSelectionText)),
+	)
 
 	g_ui.previewText = tview.NewTextArea()
 	g_ui.hintsBar = tview.NewTextView()
@@ -55,36 +56,25 @@ func main() {
 		SetBorder(true).
 		SetTitle("Folders")
 
-	g_ui.emailsList.
-		SetBorder(true).
-		SetTitle("Emails")
-
 	g_ui.previewText.
 		SetBorder(true).
 		SetTitle("Preview")
 
-	g_ui.emailsStatusBar.
-		SetTextAlign(tview.AlignRight).
-		SetTextColor(tcell.NewHexColor(0xFFD369)).
-		SetBackgroundColor(tcell.NewHexColor(0x393E46))
-
-	g_ui.emailsPane = tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(g_ui.emailsList, 0, 10, true).
-		AddItem(g_ui.emailsStatusBar, 1, 0, false)
-
-	pane := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(g_ui.emailsPane, 0, 4, false).
+	g_ui.emailsFrame = tview.NewFrame(g_ui.emailsTable).
+		SetBorders(0, 0, 1, 0, 1, 1)
+	updateEmailStatusBarWithSelection()
+	g_ui.emailsPane = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(g_ui.hintsBar, 1, 0, false).
+		AddItem(g_ui.emailsFrame, 0, 7, false).
 		AddItem(g_ui.previewText, 0, 5, false)
 
 	g_ui.columnsPane = tview.NewFlex().
 		SetDirection(tview.FlexColumn).
 		AddItem(g_ui.foldersList, 0, 2, false).
-		AddItem(pane, 0, 9, false)
+		AddItem(g_ui.emailsPane, 0, 9, false)
 
 	g_ui.mainPane = tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(g_ui.hintsBar, 1, 0, false).
 		AddItem(g_ui.columnsPane, 0, 10, false).
 		AddItem(g_ui.statusBar, 1, 0, false)
 
@@ -108,8 +98,9 @@ func main() {
 	g_ui.pages.AddPage("compose", g_ui.composePane, true, false)
 
 	g_ui.app.SetInputCapture(KeyHandler)
+
 	g_ui.app.SetRoot(g_ui.pages, true)
-	g_ui.app.SetFocus(g_ui.emailsList)
+	g_ui.app.SetFocus(g_ui.emailsTable)
 
 	go imapInit()
 	go smtpInit()
