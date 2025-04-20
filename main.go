@@ -44,7 +44,6 @@ func main() {
 	g_ui.previewText = tview.NewTextArea()
 	g_ui.hintsBar = tview.NewTextView()
 	g_ui.hintsBar.SetDynamicColors(true)
-	g_ui.hintsBarVisible = true
 	setHintsBarText()
 
 	g_ui.statusBar = tview.NewTextView()
@@ -64,9 +63,11 @@ func main() {
 		SetBorders(0, 0, 1, 0, 1, 1)
 	updateEmailStatusBarWithSelection()
 	g_ui.emailsPane = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(g_ui.hintsBar, 1, 0, false).
+		AddItem(g_ui.hintsBar, 0, 0, false).
 		AddItem(g_ui.emailsFrame, 0, 7, false).
-		AddItem(g_ui.previewText, 0, 5, false)
+		AddItem(g_ui.previewText, 0, 0, false)
+	toggleHintsBar()
+	togglePreviewBar()
 
 	g_ui.columnsPane = tview.NewFlex().
 		SetDirection(tview.FlexColumn).

@@ -30,8 +30,9 @@ type UI struct {
 	// the first element selected until they manually change the selection
 	emailsPegSelectionToTop bool
 
-	previewText *tview.TextArea
-	previewUid  uint32
+	previewText    *tview.TextArea
+	previewUid     uint32
+	previewVisible bool
 
 	hintsBar        *tview.TextView
 	hintsBarVisible bool

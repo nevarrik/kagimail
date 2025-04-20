@@ -15,6 +15,9 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 			switch event.Rune() {
 			case 'r':
 				if g_ui.previewUid != 0 {
+					if g_ui.previewVisible == false {
+						togglePreviewBar()
+					}
 					setUIMode(UIModeQuickReply)
 					previewPaneSetReply()
 					g_ui.app.SetFocus(g_ui.previewText)
@@ -25,6 +28,10 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 
 			case 'h':
 				toggleHintsBar()
+				return nil
+
+			case 'p':
+				togglePreviewBar()
 				return nil
 
 			case 'c':

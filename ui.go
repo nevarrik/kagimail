@@ -195,7 +195,7 @@ func setHintsBarText() {
 	var hints string
 	if g_ui.mode == UIModeNormal {
 		hints = " _Compose _Reply _Forward |"
-		hints += " _Quit [F5]:Refresh [Tab]:Move Focus _Hide"
+		hints += " _Quit [F5]:Refresh [Tab]:Move Focus _Hide _Preview"
 	} else if g_ui.mode == UIModeQuickReply {
 		hints = " [Ctrl+Enter]:Send | [Esc]:Discard"
 	} else if g_ui.mode == UIModeCompose {
@@ -230,6 +230,15 @@ func toggleHintsBar() {
 		height = 1
 	}
 	g_ui.emailsPane.ResizeItem(g_ui.hintsBar, height, 0)
+}
+
+func togglePreviewBar() {
+	g_ui.previewVisible = !g_ui.previewVisible
+	height := 0
+	if g_ui.previewVisible {
+		height = 5
+	}
+	g_ui.emailsPane.ResizeItem(g_ui.previewText, 0, height)
 }
 
 func insertImapEmailToList(email Email) {
