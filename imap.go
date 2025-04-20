@@ -453,6 +453,13 @@ func updateEmailBody(folder string, imapEmail *imap.Message) error {
 		}
 	}
 
+	if plainText == "" {
+		plainText = fmt.Sprintf(
+			"<no plaintext message found, email size: %s>",
+			FormatHumanReadableSize(n),
+		)
+	}
+
 	cachedEmailBodyUpdate(folder, imapEmail.Uid, plainText, n)
 	return nil
 }
