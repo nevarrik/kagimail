@@ -26,6 +26,7 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 					setUIMode(UIModeQuickReply)
 					previewPaneSetReply()
 					g_ui.app.SetFocus(g_ui.previewText)
+					onFocusChange()
 				} else {
 					updateStatusBar("No message selected to reply to")
 				}
