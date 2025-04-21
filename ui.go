@@ -110,6 +110,7 @@ func previewPaneSetBody(uid uint32, body string) {
 }
 
 func previewPaneSetReply() {
+	Assert(IsOnUiThread(), "g_ui access should be syncronized on ui thread")
 	Assert(g_ui.previewUid != 0, "no preview message selected")
 	Assert(g_ui.mode == UIModeQuickReply, "not in quick reply mode")
 
@@ -149,6 +150,7 @@ func previewPaneSetReply() {
 }
 
 func updateEmailStatusBarWithSelection() {
+	Assert(IsOnUiThread(), "g_ui access should be syncronized on ui thread")
 	if g_ui.folderItemCount == 0 {
 		updateEmailStatusBar("Empty folder")
 		return
@@ -162,6 +164,7 @@ func updateEmailStatusBarWithSelection() {
 
 func updateEmailStatusBar(text string) {
 	setFrameText := func(text string) {
+		Assert(IsOnUiThread(), "g_ui access should be syncronized on ui thread")
 		co := tcell.GetColor(coEmailStatusBarText)
 		g_ui.emailsFrame.Clear().
 			AddText("↑↓:Navigate", false, tview.AlignLeft, co).
@@ -175,6 +178,7 @@ func updateEmailStatusBar(text string) {
 }
 
 func onEmailsTableSelectionChange(row int, col int) {
+	Assert(IsOnUiThread(), "g_ui access should be syncronized on ui thread")
 	updateEmailStatusBarWithSelection()
 
 	folder := g_ui.folderSelected
@@ -197,6 +201,7 @@ func updateStatusBar(text string) {
 }
 
 func setHintsBarText() {
+	Assert(IsOnUiThread(), "g_ui access should be syncronized on ui thread")
 	var hints string
 	if g_ui.mode == UIModeNormal {
 		hints = " _Compose _Reply _Forward |"
@@ -229,6 +234,7 @@ func setHintsBarText() {
 }
 
 func toggleHintsBar() {
+	Assert(IsOnUiThread(), "g_ui access should be syncronized on ui thread")
 	g_ui.hintsBarVisible = !g_ui.hintsBarVisible
 	height := 0
 	if g_ui.hintsBarVisible {
@@ -238,6 +244,7 @@ func toggleHintsBar() {
 }
 
 func togglePreviewBar() {
+	Assert(IsOnUiThread(), "g_ui access should be syncronized on ui thread")
 	g_ui.previewVisible = !g_ui.previewVisible
 	height := 0
 	if g_ui.previewVisible {
@@ -301,6 +308,7 @@ func insertImapEmailToList(email Email) {
 }
 
 func removeEmailFromList(i int) {
+	Assert(IsOnUiThread(), "g_ui access should be syncronized on ui thread")
 	g_ui.emailsTable.RemoveRow(i)
 	g_ui.emailsUidList = append(
 		g_ui.emailsUidList[:i],

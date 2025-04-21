@@ -340,10 +340,11 @@ func imapWorker() {
 	chImapUpdates := make(chan client.Update, 10)
 
 	// separate client to listen for idle commands to fetch new incoming emails
+	folderUpdates := "Inbox"
 	go func() {
 		cltIdle := imapLogin()
 		defer cltIdle.Logout()
-		_, err = cltIdle.Select("Inbox", true)
+		_, err = cltIdle.Select(folderUpdates, true)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -402,7 +403,7 @@ func imapWorker() {
 
 				case *client.MessageUpdate:
 					messageUpdate := update.(*client.MessageUpdate)
-					folder := g_ui.folderSelected
+					folder := folderUpdates
 					seqNum := messageUpdate.Message.SeqNum
 					done := make(chan error, 1)
 					criteria := imap.NewSearchCriteria()
@@ -418,9 +419,8 @@ func imapWorker() {
 
 				case *client.ExpungeUpdate:
 					expungeUpdate := update.(*client.ExpungeUpdate)
-					folder := "Inbox"
 					k := cachedEmailRemoveViaSeqNum(
-						folder, expungeUpdate.SeqNum)
+						folderUpdates, expungeUpdate.SeqNum)
 					if k != -1 {
 						removeEmailFromList(k)
 					}
