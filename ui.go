@@ -126,6 +126,12 @@ func previewPaneSetBody(uid uint32, body string) {
 		)
 		if g_ui.previewUid == uid {
 			g_ui.previewText.SetText(body, false)
+			// if we are in UIModeQuickReply, that means they hit r on this
+			// message, but it hadn't downloaded yet. But now that we have it
+			// go ahead transform the body into a reply and set focus
+			if g_ui.mode == UIModeQuickReply {
+				previewPaneSetReply()
+			}
 		}
 	})
 }
@@ -168,6 +174,8 @@ func previewPaneSetReply() {
 	}
 
 	g_ui.previewText.SetText(reply.String(), false)
+	g_ui.app.SetFocus(g_ui.previewText)
+	onFocusChange()
 }
 
 func updateEmailStatusBarWithSelection() {
@@ -220,6 +228,7 @@ func onEmailsTableSelectionChange(row int, col int) {
 
 	g_ui.previewUid = uid
 	g_ui.previewText.SetTitle("Preview")
+	g_ui.previewText.SetText("", false)
 	go fetchEmailBody(g_ui.folderSelected, uid)
 }
 
