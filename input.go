@@ -10,7 +10,12 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 	mode := g_ui.mode
 
 	allowSingleKeys := mode == UIModeNormal
-	if allowSingleKeys && event.Key() == tcell.KeyRune {
+	if allowSingleKeys {
+		if event.Key() == tcell.KeyF5 {
+			go fetchFolder(g_ui.folderSelected)
+			return nil
+		}
+
 		if event.Key() == tcell.KeyRune {
 			switch event.Rune() {
 			case 'r':

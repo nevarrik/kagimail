@@ -186,6 +186,16 @@ func cachedEmailFromFolderItemCount(folder string) int {
 	return len(g_emailsFromFolder[folder])
 }
 
+func cachedEmailSeqNumMaxFromFolder(folder string) uint32 {
+	seqNum := uint32(0)
+	g_emailsMu.Lock()
+	for _, email := range g_emailsFromFolder[folder] {
+		seqNum = max(seqNum, email.seqNum)
+	}
+	g_emailsMu.Unlock()
+	return seqNum
+}
+
 func assertEmailCorrectlyInCacheLocked(folder string, email *Email) {
 	assertValidFolderName(folder)
 	uid := email.uid

@@ -27,20 +27,26 @@ const (
 	coSelectionTextInactive = "#000000"
 )
 
+func notifyFetchStarted(folder string, n int) {
+	Assert(IsOnUiThread(), "modifying g_ui should be on ui thread")
+	g_ui.folderItemCount = n
+	updateStatusBar(fmt.Sprintf("Retrieving latest emails from %s", folder))
+}
+
 func notifyFetchAllStarted(folder string, n int) {
 	g_ui.app.QueueUpdateDraw(func() {
 		folder := getNormalizedImapFolderName(folder)
+		notifyFetchStarted(folder, n)
 		if g_ui.folderSelected == folder {
 			return
 		}
+		// switching folders initialization
 		g_ui.emailsTable.Clear()
 		g_ui.emailsUidList = g_ui.emailsUidList[:0]
 		g_ui.folderSelected = folder
-		g_ui.folderItemCount = n
 		g_ui.emailsPegSelectionToTop = true
 		g_ui.previewUid = 0
 		g_ui.previewText.SetTitle("Preview")
-		updateStatusBar(fmt.Sprintf("Retrieving %d emails from %s", n, folder))
 	})
 }
 
@@ -52,18 +58,25 @@ func notifyFetchAllFinished(err error, folder string) {
 	}
 
 	g_ui.app.QueueUpdateDraw(func() {
-		if g_ui.emailsTable.GetRowCount() == g_ui.folderItemCount {
-			updateEmailStatusBar(fmt.Sprintf(
-				"Folder up to date with %d emails", g_ui.folderItemCount))
-		}
+		Assert(
+			g_ui.emailsTable.GetRowCount() == g_ui.folderItemCount,
+			"notifyFetchAllFinished should have downloaded everything",
+		)
+		updateStatusBar(fmt.Sprintf(
+			"Folder up to date with %d emails as of %s", g_ui.folderItemCount,
+			time.Now().Format(time.Stamp),
+		))
 	})
 }
 
 func notifyFetchLatestStarted(folder string, n int) {
 	g_ui.app.QueueUpdateDraw(func() {
-		g_ui.folderItemCount = n
-		updateStatusBar(fmt.Sprintf("Retrieving latest emails from %s", folder))
+		notifyFetchStarted(folder, n)
 	})
+}
+
+func notifyFetchLatestFinished(err error, folder string) {
+	notifyFetchAllFinished(err, folder)
 }
 
 func notifyFetchEmailBodyStarted(folder string, uid uint32) {
@@ -298,8 +311,7 @@ func insertImapEmailToList(email Email) {
 
 		// update statusbar
 		if g_ui.emailsTable.GetRowCount() == g_ui.folderItemCount {
-			updateEmailStatusBar(fmt.Sprintf(
-				"Folder up to date with %d emails", g_ui.folderItemCount))
+			updateEmailStatusBarWithSelection()
 		} else {
 			updateEmailStatusBar(
 				fmt.Sprintf("Downloading %d emails", g_ui.folderItemCount-g_ui.emailsTable.GetRowCount()))

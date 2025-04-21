@@ -323,7 +323,10 @@ func imapWorker() {
 
 				criteria := imap.NewSearchCriteria()
 				criteria.SeqNum = new(imap.SeqSet)
-				criteria.SeqNum.AddRange(1, mailbox.Messages)
+				criteria.SeqNum.AddRange(
+					cachedEmailSeqNumMaxFromFolder(req.folder)+1,
+					mailbox.Messages,
+				)
 				imapFetchViaCriteria(
 					cltFillLists,
 					req.folder,
@@ -395,11 +398,7 @@ func imapWorker() {
 						int(emailsAvailable),
 						"email count not matching mailbox update count")
 
-					if err != nil {
-						updateStatusBar(fmt.Sprintf(
-							"Unable update mailbox \"%s\": %v", folder, err))
-						continue
-					}
+					notifyFetchLatestFinished(err, folder)
 
 				case *client.MessageUpdate:
 					messageUpdate := update.(*client.MessageUpdate)
