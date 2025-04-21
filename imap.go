@@ -16,10 +16,16 @@ import (
 	"github.com/emersion/go-message/mail"
 )
 
+const (
+	fetchFolderOptionAllEmails uint32 = 1 << iota
+	fetchFolderOptionLatestOnly
+)
+
 type FetchFolderRequest struct {
-	folder    string
-	mailCount chan int
-	done      chan error
+	folder             string
+	fetchFolderOptions uint32
+	emailCount         chan int
+	done               chan error
 }
 
 type FetchEmailBodyRequest struct {
@@ -53,11 +59,16 @@ func fetchEmailBody(folder string, uid uint32) {
 	notifyFetchEmailBodyFinished(err, folder, uid, flags)
 }
 
-func fetchFolder(folder string) {
+func fetchFolder(folder string, fetchFolderOptions uint32) {
 	assertValidFolderName(folder)
 	emailCount := make(chan int, 1)
 	done := make(chan error, 1)
-	chFetchFolder <- FetchFolderRequest{folder, emailCount, done}
+	chFetchFolder <- FetchFolderRequest{
+		folder:             folder,
+		fetchFolderOptions: fetchFolderOptions,
+		emailCount:         emailCount,
+		done:               done,
+	}
 
 	n := <-emailCount
 	notifyFetchAllStarted(folder, n)
@@ -87,7 +98,7 @@ func imapInit() {
 		fetchFolderList()
 		if g_ui.foldersList.GetItemCount() > 0 {
 			folder, _ := g_ui.foldersList.GetItemText(0)
-			fetchFolder(folder)
+			fetchFolder(folder, fetchFolderOptionAllEmails)
 		}
 	}()
 }
@@ -326,14 +337,16 @@ func imapWorker() {
 					req.done <- err
 					return
 				}
-				req.mailCount <- int(mailbox.Messages)
+				req.emailCount <- int(mailbox.Messages)
 
 				criteria := imap.NewSearchCriteria()
 				criteria.SeqNum = new(imap.SeqSet)
-				criteria.SeqNum.AddRange(
-					cachedEmailSeqNumMaxFromFolder(req.folder)+1,
-					mailbox.Messages,
-				)
+
+				seqLo := uint32(1)
+				if req.fetchFolderOptions&fetchFolderOptionLatestOnly != 0 {
+					seqLo = cachedEmailSeqNumMaxFromFolder(req.folder) + 1
+				}
+				criteria.SeqNum.AddRange(seqLo, mailbox.Messages)
 				imapFetchViaCriteria(
 					cltFillLists,
 					req.folder,
