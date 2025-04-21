@@ -209,7 +209,7 @@ func imapFetchViaCriteria(
 		if flags&fetchEmailBodyViaUID == 0 {
 			email, exists := cachedEmailFromUidChecked(folder, uid)
 			if exists {
-				insertImapEmailToList(email)
+				insertImapEmailToList(email, insertImapEmailOptionRestore)
 				continue
 			}
 		}
@@ -256,7 +256,7 @@ func imapFetchViaCriteria(
 				})
 				for _, email := range emails {
 					cachedEmailEnvelopeSet(email)
-					insertImapEmailToList(*email)
+					insertImapEmailToList(*email, insertImapEmailOptionDownload)
 					if flags&fetchLatestEmails != 0 {
 						trace("getting latest email seq:%d uid:%d, n: %d",
 							email.seqNum, email.uid,

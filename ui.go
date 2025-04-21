@@ -304,7 +304,12 @@ func togglePreviewBar() {
 	g_ui.emailsPane.ResizeItem(g_ui.previewText, 0, height)
 }
 
-func insertImapEmailToList(email Email) {
+const (
+	insertImapEmailOptionRestore uint32 = 1 << iota
+	insertImapEmailOptionDownload
+)
+
+func insertImapEmailToList(email Email, insertImapEmailOptionFlags uint32) {
 	g_ui.app.QueueUpdateDraw(func() {
 		Assert(
 			g_ui.folderSelected == email.folder,
@@ -351,8 +356,12 @@ func insertImapEmailToList(email Email) {
 		if g_ui.emailsTable.GetRowCount() == g_ui.folderItemCount {
 			updateEmailStatusBarWithSelection()
 		} else {
+			verb := "Downloading"
+			if insertImapEmailOptionFlags&insertImapEmailOptionRestore != 0 {
+				verb = "Loading"
+			}
 			updateEmailStatusBar(
-				fmt.Sprintf("Downloading %d emails", g_ui.folderItemCount-g_ui.emailsTable.GetRowCount()))
+				fmt.Sprintf("%s %d emails", verb, g_ui.folderItemCount-g_ui.emailsTable.GetRowCount()))
 		}
 	})
 }

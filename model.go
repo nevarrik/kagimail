@@ -34,12 +34,6 @@ func modelInit() {
 	g_emailsFromFolder = make(map[string][]*Email)
 }
 
-func cachedEmailByFolderBinarySearch(email Email) int {
-	g_emailsMu.Lock()
-	defer g_emailsMu.Unlock()
-	return cachedEmailByFolderBinarySearchLocked(email)
-}
-
 func cachedEmailFromUidsBinarySearch(emailsUidList []uint32, email Email) int {
 	g_emailsMu.Lock()
 	defer g_emailsMu.Unlock()
