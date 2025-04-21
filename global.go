@@ -21,7 +21,8 @@ type UI struct {
 
 	// main pane
 	//
-	foldersList *tview.List
+	foldersList        *tview.List
+	foldersListVisible bool
 
 	emailsFrame     *tview.Frame
 	emailsTable     *tview.Table

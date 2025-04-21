@@ -32,6 +32,10 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 				}
 				return nil
 
+			case 'f':
+				toggleFoldersPane()
+				return nil
+
 			case 'h':
 				toggleHintsBar()
 				return nil

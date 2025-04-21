@@ -64,8 +64,9 @@ func main() {
 
 	g_ui.columnsPane = tview.NewFlex().
 		SetDirection(tview.FlexColumn).
-		AddItem(g_ui.foldersList, 0, 2, false).
+		AddItem(g_ui.foldersList, 0, 0, false).
 		AddItem(g_ui.emailsPane, 0, 9, false)
+	toggleFoldersPane()
 
 	g_ui.mainPane = tview.NewFlex().
 		SetDirection(tview.FlexRow).

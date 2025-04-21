@@ -236,8 +236,8 @@ func setHintsBarText() {
 	Assert(IsOnUiThread(), "g_ui access should be syncronized on ui thread")
 	var hints string
 	if g_ui.mode == UIModeNormal {
-		hints = " _Compose _Reply _Forward |"
-		hints += " _Quit [F5]:Refresh [Tab]:Move Focus _Hide _Preview"
+		hints = " _Compose _Reply _Forward [F5]:Refresh |"
+		hints += " [Tab]:Move Focus _Folders _Hints _Preview _Quit"
 	} else if g_ui.mode == UIModeQuickReply {
 		hints = " [Ctrl+Enter]:Send | [Esc]:Discard"
 	} else if g_ui.mode == UIModeCompose {
@@ -263,6 +263,16 @@ func setHintsBarText() {
 		}
 	}
 	g_ui.hintsBar.SetText(hintsRendered.String())
+}
+
+func toggleFoldersPane() {
+	Assert(IsOnUiThread(), "g_ui access should be syncronized on ui thread")
+	g_ui.foldersListVisible = !g_ui.foldersListVisible
+	width := 0
+	if g_ui.foldersListVisible {
+		width = 2
+	}
+	g_ui.columnsPane.ResizeItem(g_ui.foldersList, 0, width)
 }
 
 func toggleHintsBar() {
