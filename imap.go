@@ -229,6 +229,7 @@ func imapFetchViaCriteria(
 						if !ok {
 							break fetchLoop
 						}
+						trace("downloaded body for: %d", imapEmail.Uid)
 						updateEmailBody(folder, imapEmail)
 					}
 				}
@@ -245,6 +246,11 @@ func imapFetchViaCriteria(
 				for _, email := range emails {
 					cachedEmailEnvelopeSet(email)
 					insertImapEmailToList(*email)
+					if flags&fetchLatestEmails != 0 {
+						trace("getting latest email seq:%d uid:%d, n: %d",
+							email.seqNum, email.uid,
+							g_ui.emailsTable.GetRowCount())
+					}
 				}
 
 				err = <-chFetchDone
@@ -284,6 +290,7 @@ func imapWorker() {
 				criteria := imap.NewSearchCriteria()
 				criteria.Uid = new(imap.SeqSet)
 				criteria.Uid.AddNum(reqLast.uid)
+				trace("download body for: %d", reqLast.uid)
 				imapFetchViaCriteria(
 					cltDownloadBody,
 					reqLast.folder,
@@ -374,6 +381,8 @@ func imapWorker() {
 					emailsInStore := uint32(
 						cachedEmailFromFolderItemCount(folder))
 					emailsAvailable := mailboxUpdate.Mailbox.Messages
+					trace("MailboxUpdate: Available: %d, InStore: %d",
+						emailsAvailable, emailsInStore)
 					if emailsAvailable <= emailsInStore {
 						continue
 					}

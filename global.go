@@ -1,6 +1,8 @@
 package main
 
 import (
+	"log"
+
 	"github.com/rivo/tview"
 )
 
@@ -53,9 +55,16 @@ type MailConfig struct {
 	Email       string `toml:"email"`
 	Password    string `toml:"password"`
 	DisplayName string `toml:"display_name"`
+	Trace       bool   `toml:"trace,omitempty"`
 }
 
 var (
 	g_ui     UI
 	g_config MailConfig
 )
+
+func trace(format string, v ...any) {
+	if g_config.Trace {
+		log.Printf(format, v...)
+	}
+}

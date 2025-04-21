@@ -104,6 +104,7 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 			tcell.KeyPgUp,
 			tcell.KeyPgDn,
 			tcell.KeyEnter:
+			trace("g_ui.emailsPegSelectionToTop cleared")
 			g_ui.emailsPegSelectionToTop = false
 		}
 	}

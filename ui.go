@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cloudfoundry/jibber_jabber"
 	"github.com/gdamore/tcell/v2"
@@ -44,6 +45,7 @@ func notifyFetchAllStarted(folder string, n int) {
 		g_ui.emailsTable.Clear()
 		g_ui.emailsUidList = g_ui.emailsUidList[:0]
 		g_ui.folderSelected = folder
+		trace("g_ui.emailsPegSelectionToTop set")
 		g_ui.emailsPegSelectionToTop = true
 		g_ui.previewUid = 0
 		g_ui.previewText.SetTitle("Preview")
@@ -116,6 +118,12 @@ func notifyFetchEmailBodyFinished(
 func previewPaneSetBody(uid uint32, body string) {
 	g_ui.app.QueueUpdateDraw(func() {
 		folder := g_ui.folderSelected
+		email := cachedEmailFromUid(folder, uid)
+		trace(
+			"previewPaneSetBody came in for email: %d, %s",
+			uid,
+			email.subject,
+		)
 		if g_ui.previewUid == uid {
 			g_ui.previewText.SetText(body, false)
 		}
@@ -199,6 +207,17 @@ func onEmailsTableSelectionChange(row int, col int) {
 	if g_ui.previewUid == uid {
 		return
 	}
+
+	email := cachedEmailFromUid(folder, uid)
+	trace(
+		"emailsTable.selection change to row:%d, col:%d, email seq:%d, uid:%d, %s",
+		row,
+		col,
+		email.seqNum,
+		email.uid,
+		email.subject,
+	)
+
 	g_ui.previewUid = uid
 	g_ui.previewText.SetTitle("Preview")
 	go fetchEmailBody(g_ui.folderSelected, uid)
