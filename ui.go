@@ -348,7 +348,11 @@ func insertImapEmailToList(email Email, insertImapEmailOptionFlags uint32) {
 				SetMaxWidth(width)
 			g_ui.emailsTable.SetCell(y, x, cell)
 		}
-		setCell(i, 0, email.fromName)
+		if email.fromName != "" {
+			setCell(i, 0, email.fromName)
+		} else {
+			setCell(i, 0, email.fromAddress)
+		}
 		setCell(i, 1, email.subject)
 
 		Assert(len(g_ui.emailsUidList) == g_ui.emailsTable.GetRowCount(), "")
