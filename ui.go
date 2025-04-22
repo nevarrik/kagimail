@@ -480,5 +480,9 @@ func onFocusChange() {
 	g_ui.previewText.SetBorderColor(previewBorderColor)
 	g_ui.previewText.SetTitleColor(previewBorderColor)
 
+	composeBorderColor := coBorderFocused
+	g_ui.composeForm.SetBorderColor(composeBorderColor)
+	g_ui.composeForm.SetTitleColor(composeBorderColor)
+
 	g_ui.app.ForceDraw()
 }

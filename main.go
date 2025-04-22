@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
@@ -84,10 +85,14 @@ func main() {
 		SetBorder(true).
 		SetTitle("Compose").
 		SetTitleAlign(tview.AlignLeft)
+
 	g_ui.composeForm.AddInputField("To:", "", 0, nil, nil)
 	g_ui.composeForm.AddInputField("Cc:", "", 0, nil, nil)
 	g_ui.composeForm.AddInputField("Subject:", "", 0, nil, nil)
-	g_ui.composeForm.AddTextArea("Message:", "", 0, 12, 0, nil)
+	g_ui.composeForm.AddTextArea("Message:", "", 0, 14, 0, nil)
+	g_ui.composeForm.SetLabelColor(tcell.GetColor(coEmailUnread))
+	g_ui.composeForm.SetFieldBackgroundColor(tcell.GetColor(coSelectionFocused))
+	g_ui.composeForm.SetFieldTextColor(tcell.GetColor(coSelectionTextFocused))
 
 	g_ui.composePane = tview.NewFlex()
 	g_ui.composePane.SetDirection(tview.FlexRow).
