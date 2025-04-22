@@ -11,6 +11,12 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 
 	allowSingleKeys := mode == UIModeNormal
 	if allowSingleKeys {
+		if event.Key() == tcell.KeyEsc {
+			if g_ui.folderDownloadCancel != nil {
+				g_ui.folderDownloadCancel()
+			}
+		}
+
 		if event.Key() == tcell.KeyF5 {
 			go fetchFolder(g_ui.folderSelected, fetchFolderOptionLatestOnly)
 			return nil

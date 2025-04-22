@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -26,6 +27,7 @@ type FetchFolderRequest struct {
 	fetchFolderOptions uint32
 	emailCount         chan int
 	done               chan error
+	ctx                context.Context
 }
 
 type FetchEmailBodyRequest struct {
@@ -63,15 +65,20 @@ func fetchFolder(folder string, fetchFolderOptions uint32) {
 	assertValidFolderName(folder)
 	emailCount := make(chan int, 1)
 	done := make(chan error, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	chFetchFolder <- FetchFolderRequest{
 		folder:             folder,
 		fetchFolderOptions: fetchFolderOptions,
 		emailCount:         emailCount,
 		done:               done,
+		ctx:                ctx,
 	}
 
 	n := <-emailCount
-	notifyFetchAllStarted(folder, n)
+	notifyFetchAllStarted(folder, n, cancel)
 
 	err := <-done
 	notifyFetchAllFinished(err, folder)
@@ -125,13 +132,16 @@ const (
 )
 
 func imapFetchViaCriteria(
+	ctx context.Context,
 	clt *client.Client,
 	folder string,
 	searchCriteria *imap.SearchCriteria,
 	chAllDone chan error,
 	flags uint,
 ) {
-	collectEmails := func(folder string, chEmails chan *imap.Message) []*Email {
+	collectEmails := func(
+		ctx context.Context, folder string, chEmails chan *imap.Message,
+	) []*Email {
 		var emails []*Email
 		for {
 			select {
@@ -142,7 +152,20 @@ func imapFetchViaCriteria(
 
 				email := emailFromImapEmail(folder, imapEmail)
 				emails = append(emails, email)
+
+			case <-ctx.Done():
+				return emails
 			}
+		}
+	}
+
+	hasCancelled := func() bool {
+		select {
+		case <-ctx.Done():
+			chAllDone <- ctx.Err()
+			return true
+		default:
+			return false
 		}
 	}
 
@@ -181,6 +204,10 @@ func imapFetchViaCriteria(
 				return
 			}
 
+			if hasCancelled() {
+				return
+			}
+
 			uids = append(uids, uids_...)
 		}
 
@@ -207,6 +234,10 @@ func imapFetchViaCriteria(
 	n := 0
 	for k, uid := range uids {
 		if flags&fetchEmailBodyViaUID == 0 {
+			if hasCancelled() {
+				return
+			}
+
 			email, exists := cachedEmailFromUidChecked(folder, uid)
 			if exists {
 				insertImapEmailToList(email, insertImapEmailOptionRestore)
@@ -237,9 +268,13 @@ func imapFetchViaCriteria(
 				for {
 					select {
 					case imapEmail, ok := <-chEmails:
+						if hasCancelled() {
+							return
+						}
 						if !ok {
 							break fetchLoop
 						}
+
 						trace("downloaded body for: %d", imapEmail.Uid)
 						updateEmailBody(folder, imapEmail)
 					}
@@ -250,11 +285,15 @@ func imapFetchViaCriteria(
 					return
 				}
 			} else {
-				emails := collectEmails(folder, chEmails)
+				emails := collectEmails(ctx, folder, chEmails)
 				sort.Slice(emails, func(i, j int) bool {
 					return emailCompare(*emails[i], *emails[j])
 				})
 				for _, email := range emails {
+					if hasCancelled() {
+						return
+					}
+
 					cachedEmailEnvelopeSet(email)
 					insertImapEmailToList(*email, insertImapEmailOptionDownload)
 					if flags&fetchLatestEmails != 0 {
@@ -302,7 +341,9 @@ func imapWorker() {
 				criteria.Uid = new(imap.SeqSet)
 				criteria.Uid.AddNum(reqLast.uid)
 				trace("download body for: %d", reqLast.uid)
+				ctx := context.Background()
 				imapFetchViaCriteria(
+					ctx,
 					cltDownloadBody,
 					reqLast.folder,
 					criteria,
@@ -348,6 +389,7 @@ func imapWorker() {
 				}
 				criteria.SeqNum.AddRange(seqLo, mailbox.Messages)
 				imapFetchViaCriteria(
+					req.ctx,
 					cltFillLists,
 					req.folder,
 					criteria,
@@ -406,14 +448,16 @@ func imapWorker() {
 							"Unable update mailbox \"%s\": %v", folder, err))
 						continue
 					}
-					notifyFetchLatestStarted(folder, int(mailbox.Messages))
+					ctx, cancel := context.WithCancel(context.Background())
+					notifyFetchLatestStarted(
+						folder, int(mailbox.Messages), cancel)
 
 					criteria := imap.NewSearchCriteria()
 					criteria.SeqNum = new(imap.SeqSet)
 					criteria.SeqNum.AddRange(emailsInStore+1, emailsAvailable)
 					done := make(chan error, 1)
 					imapFetchViaCriteria(
-						cltUpdates, folder, criteria, done, fetchLatestEmails)
+						ctx, cltUpdates, folder, criteria, done, fetchLatestEmails)
 
 					err = <-done
 					Assert(cachedEmailFromFolderItemCount(folder) ==
@@ -430,8 +474,9 @@ func imapWorker() {
 					criteria := imap.NewSearchCriteria()
 					criteria.SeqNum = new(imap.SeqSet)
 					criteria.SeqNum.AddNum(seqNum)
+					ctx := context.Background()
 					imapFetchViaCriteria(
-						cltUpdates, folder, criteria, done, fetchSingle)
+						ctx, cltUpdates, folder, criteria, done, fetchSingle)
 					err := <-done
 					if err != nil {
 						updateStatusBar(fmt.Sprintf(

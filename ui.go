@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -28,16 +29,17 @@ const (
 	coSelectionTextInactive = "#000000"
 )
 
-func notifyFetchStarted(folder string, n int) {
+func notifyFetchStarted(folder string, n int, cancel context.CancelFunc) {
 	Assert(IsOnUiThread(), "modifying g_ui should be on ui thread")
 	g_ui.folderItemCount = n
+	g_ui.folderDownloadCancel = cancel
 	updateStatusBar(fmt.Sprintf("Retrieving latest emails from %s", folder))
 }
 
-func notifyFetchAllStarted(folder string, n int) {
+func notifyFetchAllStarted(folder string, n int, cancel context.CancelFunc) {
 	g_ui.app.QueueUpdateDraw(func() {
 		folder := getNormalizedImapFolderName(folder)
-		notifyFetchStarted(folder, n)
+		notifyFetchStarted(folder, n, cancel)
 		if g_ui.folderSelected == folder {
 			return
 		}
@@ -53,27 +55,33 @@ func notifyFetchAllStarted(folder string, n int) {
 }
 
 func notifyFetchAllFinished(err error, folder string) {
-	if err != nil {
-		updateStatusBar(fmt.Sprintf(
-			"Unable to download messages for folder \"%s\": %v", folder, err))
-		return
-	}
-
 	g_ui.app.QueueUpdateDraw(func() {
-		Assert(
-			g_ui.emailsTable.GetRowCount() == g_ui.folderItemCount,
-			"notifyFetchAllFinished should have downloaded everything",
-		)
-		updateStatusBar(fmt.Sprintf(
-			"Folder up to date with %d emails as of %s", g_ui.folderItemCount,
-			time.Now().Format(time.Stamp),
-		))
+		g_ui.folderDownloadCancel = nil
+		updateEmailStatusBarWithSelection()
+		if err != nil {
+			if err == context.Canceled {
+				updateStatusBar("Cancelled downloading of folder")
+			} else {
+				updateStatusBar(fmt.Sprintf(
+					"Unable to download messages for folder \"%s\": %v",
+					folder, err))
+			}
+		} else {
+			Assert(
+				g_ui.emailsTable.GetRowCount() == g_ui.folderItemCount,
+				"notifyFetchAllFinished should have downloaded everything",
+			)
+			updateStatusBar(fmt.Sprintf(
+				"Folder up to date with %d emails as of %s", g_ui.folderItemCount,
+				time.Now().Format(time.Stamp),
+			))
+		}
 	})
 }
 
-func notifyFetchLatestStarted(folder string, n int) {
+func notifyFetchLatestStarted(folder string, n int, cancel context.CancelFunc) {
 	g_ui.app.QueueUpdateDraw(func() {
-		notifyFetchStarted(folder, n)
+		notifyFetchStarted(folder, n, cancel)
 	})
 }
 

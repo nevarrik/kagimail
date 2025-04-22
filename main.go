@@ -26,6 +26,9 @@ func main() {
 	g_ui.foldersList = tview.NewList()
 	g_ui.foldersList.SetSelectedFunc(
 		func(_ int, main string, _ string, _ rune) {
+			if g_ui.folderDownloadCancel != nil {
+				g_ui.folderDownloadCancel()
+			}
 			go fetchFolder(main, fetchFolderOptionAllEmails)
 		},
 	)
