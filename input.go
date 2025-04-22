@@ -37,6 +37,11 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 				return nil
 
 			case 'f':
+				setUIMode(UIModeCompose)
+				composeSetForward()
+				return nil
+
+			case 'd':
 				toggleFoldersPane()
 				return nil
 
@@ -50,6 +55,7 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 
 			case 'c':
 				setUIMode(UIModeCompose)
+				composeClear()
 				return nil
 
 			case 'q':

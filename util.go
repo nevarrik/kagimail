@@ -5,6 +5,10 @@ import (
 	"log"
 	"runtime"
 	"strings"
+	"time"
+
+	"github.com/cloudfoundry/jibber_jabber"
+	"github.com/goodsign/monday"
 )
 
 func Assert(condition bool, msg string) {
@@ -44,4 +48,23 @@ func FormatHumanReadableSize(bytes int64) string {
 		size, unit = size/1024, unit+1
 	}
 	return fmt.Sprintf("%.1f %s", size, units[unit])
+}
+
+func FormatLocalizedTime(time time.Time) string {
+	userLocale, err := jibber_jabber.DetectLanguage()
+	if err != nil {
+		userLocale = "en_US"
+	}
+	locale := monday.Locale(userLocale)
+	longDateFormat, ok := monday.FullFormatsByLocale[locale]
+	if !ok {
+		longDateFormat = monday.DefaultFormatEnUSFull
+	}
+	longTimeFormat, ok := monday.TimeFormatsByLocale[locale]
+	if !ok {
+		longTimeFormat = monday.DefaultFormatEnUSTime
+	}
+
+	return monday.Format(
+		time, longDateFormat+" "+longTimeFormat, locale)
 }

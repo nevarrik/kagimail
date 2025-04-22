@@ -6,10 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudfoundry/jibber_jabber"
 	"github.com/gdamore/tcell/v2"
-	"github.com/goodsign/monday"
 	"github.com/rivo/tview"
+	"gopkg.in/mail.v2"
 )
 
 const (
@@ -151,29 +150,9 @@ func previewPaneSetReply() {
 
 	email := cachedEmailFromUid(g_ui.folderSelected, g_ui.previewUid)
 
-	var formattedDate string
-	{ // get localized date/time formats
-		userLocale, err := jibber_jabber.DetectLanguage()
-		if err != nil {
-			userLocale = "en_US"
-		}
-		locale := monday.Locale(userLocale)
-		longDateFormat, ok := monday.FullFormatsByLocale[locale]
-		if !ok {
-			longDateFormat = monday.DefaultFormatEnUSFull
-		}
-		longTimeFormat, ok := monday.TimeFormatsByLocale[locale]
-		if !ok {
-			longTimeFormat = monday.DefaultFormatEnUSTime
-		}
-
-		formattedDate = monday.Format(
-			email.date, longDateFormat+" "+longTimeFormat, locale)
-	}
-
 	var reply strings.Builder
-	reply.WriteString(
-		fmt.Sprintf("\n\nOn %s %s wrote:\n", formattedDate, email.fromName))
+	reply.WriteString(fmt.Sprintf("\n\nOn %s %s wrote:\n",
+		FormatLocalizedTime(email.date), email.fromName))
 
 	originalText := g_ui.previewText.GetText()
 	for _, line := range strings.Split(originalText, "\n") {
@@ -183,6 +162,46 @@ func previewPaneSetReply() {
 
 	g_ui.previewText.SetText(reply.String(), false)
 	g_ui.app.SetFocus(g_ui.previewText)
+	onFocusChange()
+}
+
+func composeSetForward() {
+	Assert(IsOnUiThread(), "g_ui access should be syncronized on ui thread")
+	Assert(g_ui.previewUid != 0, "no preview message selected")
+	Assert(g_ui.mode == UIModeCompose, "not in compose mode")
+
+	email := cachedEmailFromUid(g_ui.folderSelected, g_ui.previewUid)
+	msgDummy := mail.NewMessage()
+	from := msgDummy.FormatAddress(email.fromAddress, email.fromName)
+	originalText := g_ui.previewText.GetText()
+	var reply strings.Builder
+	reply.WriteString(
+		fmt.Sprintf(
+			"----- Original Message -----\nFrom: %s\nTo: %s\nSubject: %s\nDate: %s\n\n%s",
+			from,
+			email.toAddress,
+			email.subject,
+			FormatLocalizedTime(email.date),
+			originalText,
+		),
+	)
+
+	fnGetFormItem := g_ui.composeForm.GetFormItem
+	fnGetFormItem(0).(*tview.InputField).SetText("")
+	fnGetFormItem(1).(*tview.InputField).SetText("")
+	fnGetFormItem(2).(*tview.InputField).SetText("Fwd: " + email.subject)
+	fnGetFormItem(3).(*tview.TextArea).SetText(reply.String(), true)
+	g_ui.composeForm.SetFocus(0)
+	onFocusChange()
+}
+
+func composeClear() {
+	fnGetFormItem := g_ui.composeForm.GetFormItem
+	fnGetFormItem(0).(*tview.InputField).SetText("")
+	fnGetFormItem(1).(*tview.InputField).SetText("")
+	fnGetFormItem(2).(*tview.InputField).SetText("")
+	fnGetFormItem(3).(*tview.TextArea).SetText("", true)
+	g_ui.composeForm.SetFocus(0)
 	onFocusChange()
 }
 
@@ -254,7 +273,7 @@ func setHintsBarText() {
 	var hints string
 	if g_ui.mode == UIModeNormal {
 		hints = " _Compose _Reply _Forward [F5]:Refresh |"
-		hints += " [Tab]:Move Focus _Folders _Hints _Preview _Quit"
+		hints += " [Tab]:Move Focus Fol_ders _Hints _Preview _Quit"
 	} else if g_ui.mode == UIModeQuickReply {
 		hints = " [Ctrl+Enter]:Send | [Esc]:Discard"
 	} else if g_ui.mode == UIModeCompose {
