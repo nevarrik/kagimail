@@ -73,6 +73,8 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 			replyEmail(email, g_ui.previewText.GetText())
 			setUIMode(UIModeNormal)
 			g_ui.previewText.SetText("", false)
+			row, _ := g_ui.emailsTable.GetSelection()
+			g_ui.emailsTable.Select(max(0, row-1), 0)
 			g_ui.app.SetFocus(g_ui.emailsTable)
 			return nil
 
