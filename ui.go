@@ -408,7 +408,14 @@ func updateImapEmailInTable(row int, email Email) {
 		_, _, totalWidth, _ := g_ui.emailsTable.GetRect()
 		totalWidth -= 2 /* padding from g_ui.emailsFrame, no way to get padding
 		   again once it is set--so magic number :( */
-		width := []int{20, totalWidth - 27, 7}[x]
+
+		fromColWidth := int(float32(totalWidth) * .20)
+		dateColWidth := 7
+		width := []int{
+			fromColWidth,
+			totalWidth - fromColWidth - dateColWidth,
+			dateColWidth,
+		}[x]
 
 		text_ := text
 		if x != 2 {
