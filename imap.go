@@ -111,13 +111,18 @@ func imapInit() {
 }
 
 func imapLogin() *client.Client {
-	clt, err := client.DialTLS(g_config.IMAPHost+":993", nil)
+	addr := g_config.IMAPHost + ":993"
+	clt, err := client.DialTLS(addr, nil)
 	if err != nil {
+		updateStatusBar(
+			fmt.Sprintf("Couldn't connect to: %s, err: %v", addr, err))
 		log.Fatal(err)
 	}
 
 	err = clt.Login(g_config.Email, g_config.Password)
 	if err != nil {
+		updateStatusBar(
+			fmt.Sprintf("Couldn't log into: %s, err: %v", addr, err))
 		log.Fatal(err)
 	}
 
