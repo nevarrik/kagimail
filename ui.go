@@ -44,8 +44,10 @@ func uiInit() {
 			if du > time.Hour*24 {
 				colText := g_ui.emailsTable.GetCell(row, 2).Text
 				colText_ := FormatAsRelativeTimeIfWithin24Hours(email.date)
-				Assert(colText == colText_, "date format changed in "+
-					"updateImapEmailInTable, revisit this code")
+				Assert(
+					strings.TrimSpace(colText) == strings.TrimSpace(colText_),
+					"date format changed in updateImapEmailInTable, revisit this code",
+				)
 				break
 			}
 
