@@ -404,21 +404,21 @@ const (
 func updateImapEmailInTable(row int, email Email) {
 	setCell := func(y int, x int, text string, co string) {
 		_, _, totalWidth, _ := g_ui.emailsTable.GetRect()
-		width := []int{20, totalWidth - 28, 7}[x]
+		totalWidth -= 2 /* padding from g_ui.emailsFrame, no way to get padding
+		   again once it is set--so magic number :( */
+		width := []int{20, totalWidth - 27, 7}[x]
 
 		text_ := text
 		if x != 2 {
 			// pad with spaces, so tview.Table doesn't make column narrower
 			text_ = fmt.Sprintf("%-*s", width, text)
+		} else {
+			text_ = fmt.Sprintf("%*s", width, text)
 		}
 
 		cell := tview.NewTableCell(text_).
 			SetTextColor(tcell.GetColor(co)).
 			SetMaxWidth(width)
-
-		if x == 2 {
-			cell.SetAlign(tview.AlignRight)
-		}
 
 		g_ui.emailsTable.SetCell(y, x, cell)
 	}
