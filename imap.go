@@ -103,10 +103,10 @@ func imapInit() {
 
 	go func() {
 		fetchFolderList()
-		if g_ui.foldersList.GetItemCount() > 0 {
-			folder, _ := g_ui.foldersList.GetItemText(0)
-			fetchFolder(folder, fetchFolderOptionAllEmails)
-		}
+	}()
+
+	go func() {
+		fetchFolder("Inbox", fetchFolderOptionAllEmails)
 	}()
 }
 
@@ -365,14 +365,24 @@ func imapWorker() {
 			select {
 			case req := <-chFetchFolderList:
 				mailboxes := make(chan *imap.MailboxInfo, 10)
+				done := make(chan error, 1)
+
 				go func() {
-					req.done <- cltFillLists.List(
+					done <- cltFillLists.List(
 						"" /* base folder hierarchy */, "*", mailboxes)
 				}()
+
+				err := <-done
+				if err != nil {
+					req.done <- err
+					return
+				}
 
 				for mailbox := range mailboxes {
 					insertFolderToList(mailbox.Name)
 				}
+
+				req.done <- nil
 
 			case req := <-chFetchFolder:
 				mailbox, err := cltFillLists.Select(
