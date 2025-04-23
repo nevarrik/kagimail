@@ -22,8 +22,18 @@ func KeyHandler(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		}
 
-		if event.Key() == tcell.KeyRune {
-			switch event.Rune() {
+		ctrlLetter := event.Modifiers()&tcell.ModCtrl != 0
+
+		if event.Key() == tcell.KeyRune || ctrlLetter {
+			char := event.Rune()
+			if ctrlLetter {
+				// convert ctrl + alpha into rune, by taking its rune value
+				// which is the ascii value as a control character
+				// e.g. Ctrl+A == 65 == 'A'; Ctrl+H == 8 == Backspace == 'H'
+				char = 'a' + event.Rune() - 1
+			}
+
+			switch char {
 			case 'r':
 				if g_ui.previewUid != 0 {
 					if g_ui.previewVisible == false {
