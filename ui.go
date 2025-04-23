@@ -444,6 +444,7 @@ func insertImapEmailToList(email Email, insertImapEmailOptionFlags uint32) {
 
 		i := cachedEmailFromUidsBinarySearch(g_ui.emailsUidList, email)
 		if i < len(g_ui.emailsUidList) && g_ui.emailsUidList[i] == email.uid {
+			updateImapEmailInTable(i, email)
 			return // already added
 		}
 

@@ -169,7 +169,7 @@ func imapFetchViaCriteria(
 		}
 	}
 
-	_, err := clt.Select(folder, true)
+	_, err := clt.Select(folder, false /* readOnly */)
 	if err != nil {
 		chAllDone <- err
 		return
@@ -253,6 +253,8 @@ func imapFetchViaCriteria(
 			go func() {
 				fi := []imap.FetchItem{imap.FetchUid, imap.FetchFlags}
 				if flags&fetchEmailBodyViaUID != 0 {
+					Assert(!clt.Mailbox().ReadOnly,
+						"we need folder write access for flipping seen flag")
 					section := &imap.BodySectionName{
 						Peek: false,
 					}
@@ -373,7 +375,10 @@ func imapWorker() {
 				}
 
 			case req := <-chFetchFolder:
-				mailbox, err := cltFillLists.Select(req.folder, true)
+				mailbox, err := cltFillLists.Select(
+					req.folder,
+					true, /* readOnly */
+				)
 				if err != nil {
 					req.done <- err
 					return
@@ -409,7 +414,7 @@ func imapWorker() {
 	go func() {
 		cltIdle := imapLogin()
 		defer cltIdle.Logout()
-		_, err = cltIdle.Select(folderUpdates, true)
+		_, err = cltIdle.Select(folderUpdates, true /* readOnly */)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -442,7 +447,8 @@ func imapWorker() {
 						continue
 					}
 
-					mailbox, err := cltUpdates.Select(folder, true)
+					mailbox, err := cltUpdates.Select(
+						folder, true /* readOnly */)
 					if err != nil {
 						updateStatusBar(fmt.Sprintf(
 							"Unable update mailbox \"%s\": %v", folder, err))
@@ -545,19 +551,22 @@ func updateEmailBody(folder string, imapEmail *imap.Message) error {
 		)
 	}
 
-	cachedEmailBodyUpdate(folder, imapEmail.Uid, plainText, n)
+	isRead := emailFromImapIsRead(imapEmail)
+	cachedEmailBodyUpdate(folder, imapEmail.Uid, plainText, n, isRead)
 	return nil
 }
 
-func emailFromImapEmail(folder string, imapEmail *imap.Message) *Email {
-	var seenFlag bool
+func emailFromImapIsRead(imapEmail *imap.Message) bool {
 	for _, flag := range imapEmail.Flags {
 		if flag == imap.SeenFlag {
-			seenFlag = true
-			break
+			return true
 		}
 	}
 
+	return false
+}
+
+func emailFromImapEmail(folder string, imapEmail *imap.Message) *Email {
 	email := Email{
 		uid:         imapEmail.Uid,
 		seqNum:      imapEmail.SeqNum,
@@ -569,7 +578,7 @@ func emailFromImapEmail(folder string, imapEmail *imap.Message) *Email {
 		fromName:    "",
 		body:        "",
 		size:        0,
-		isRead:      seenFlag,
+		isRead:      emailFromImapIsRead(imapEmail),
 	}
 
 	if len(imapEmail.Envelope.To) > 0 {

@@ -122,12 +122,19 @@ func cachedEmailRemoveViaSeqNum(folder string, seqNum uint32) int {
 	return iToRemove
 }
 
-func cachedEmailBodyUpdate(folder string, uid uint32, body string, size int64) {
+func cachedEmailBodyUpdate(
+	folder string,
+	uid uint32,
+	body string,
+	size int64,
+	isRead bool,
+) {
 	Require(body != "", "we need some body to update")
 	assertValidFolderName(folder)
 	g_emailsMu.Lock()
 	email, ok := g_emailFromUid[folder][uid]
 	Assert(ok, "we needed a valid envelope first before setting body")
+	email.isRead = isRead
 	email.body = body
 	email.size = uint64(size)
 	assertEmailCorrectlyInCacheLocked(folder, email)
