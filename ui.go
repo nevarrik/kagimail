@@ -72,7 +72,7 @@ func uiInit() {
 	}()
 }
 
-func notifyFetchStarted(folder string, n int, cancel context.CancelFunc) {
+func onFetchStarted(folder string, n int, cancel context.CancelFunc) {
 	Assert(IsOnUiThread(), "modifying g_ui should be on ui thread")
 	g_ui.folderItemCount = n
 	g_ui.folderDownloadCancel = cancel
@@ -82,7 +82,7 @@ func notifyFetchStarted(folder string, n int, cancel context.CancelFunc) {
 func notifyFetchAllStarted(folder string, n int, cancel context.CancelFunc) {
 	g_ui.app.QueueUpdateDraw(func() {
 		folder := getNormalizedImapFolderName(folder)
-		notifyFetchStarted(folder, n, cancel)
+		onFetchStarted(folder, n, cancel)
 		if g_ui.folderSelected == folder {
 			return
 		}
@@ -97,39 +97,59 @@ func notifyFetchAllStarted(folder string, n int, cancel context.CancelFunc) {
 	})
 }
 
+func onFetchAllFinished(err error, folder string) {
+	Assert(IsOnUiThread(), "g_ui access should be syncronized on ui thread")
+	g_ui.folderDownloadCancel = nil
+	g_ui.emailUidSelectedBeforeDownload = 0
+	updateEmailStatusBarWithSelection()
+
+	if err != nil {
+		if err == context.Canceled {
+			updateStatusBar("Cancelled downloading of folder")
+		} else {
+			updateStatusBar(fmt.Sprintf(
+				"Unable to download messages for folder \"%s\": %v",
+				folder, err))
+		}
+	} else {
+		Assert(
+			g_ui.emailsTable.GetRowCount() == g_ui.folderItemCount,
+			"notifyFetchAllFinished should have downloaded everything",
+		)
+		updateStatusBar(fmt.Sprintf(
+			"Folder up to date with %d emails as of %s", g_ui.folderItemCount,
+			time.Now().Format(time.Stamp),
+		))
+	}
+}
+
 func notifyFetchAllFinished(err error, folder string) {
 	g_ui.app.QueueUpdateDraw(func() {
-		g_ui.folderDownloadCancel = nil
-		updateEmailStatusBarWithSelection()
-		if err != nil {
-			if err == context.Canceled {
-				updateStatusBar("Cancelled downloading of folder")
-			} else {
-				updateStatusBar(fmt.Sprintf(
-					"Unable to download messages for folder \"%s\": %v",
-					folder, err))
-			}
-		} else {
-			Assert(
-				g_ui.emailsTable.GetRowCount() == g_ui.folderItemCount,
-				"notifyFetchAllFinished should have downloaded everything",
-			)
-			updateStatusBar(fmt.Sprintf(
-				"Folder up to date with %d emails as of %s", g_ui.folderItemCount,
-				time.Now().Format(time.Stamp),
-			))
-		}
+		onFetchAllFinished(err, folder)
 	})
 }
 
 func notifyFetchLatestStarted(folder string, n int, cancel context.CancelFunc) {
 	g_ui.app.QueueUpdateDraw(func() {
-		notifyFetchStarted(folder, n, cancel)
+		row, _ := g_ui.emailsTable.GetSelection()
+		g_ui.emailUidSelectedBeforeDownload = g_ui.emailsUidList[row]
+		onFetchStarted(folder, n, cancel)
 	})
 }
 
 func notifyFetchLatestFinished(err error, folder string) {
-	notifyFetchAllFinished(err, folder)
+	g_ui.app.QueueUpdateDraw(func() {
+		if g_ui.emailUidSelectedBeforeDownload != 0 {
+			for row := 0; row < len(g_ui.emailsUidList); row++ {
+				if g_ui.emailsUidList[row] ==
+					g_ui.emailUidSelectedBeforeDownload {
+					g_ui.emailsTable.Select(row, 0)
+					break
+				}
+			}
+		}
+		onFetchAllFinished(err, folder)
+	})
 }
 
 func notifyFetchEmailBodyStarted(folder string, uid uint32) {

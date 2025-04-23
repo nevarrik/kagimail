@@ -25,12 +25,13 @@ type UI struct {
 	foldersList        *tview.List
 	foldersListVisible bool
 
-	emailsFrame          *tview.Frame
-	emailsTable          *tview.Table
-	emailsUidList        []uint32
-	folderSelected       string
-	folderItemCount      int
-	folderDownloadCancel context.CancelFunc
+	emailsFrame                    *tview.Frame
+	emailsTable                    *tview.Table
+	emailsUidList                  []uint32
+	emailUidSelectedBeforeDownload uint32
+	folderSelected                 string
+	folderItemCount                int
+	folderDownloadCancel           context.CancelFunc
 	// we set this when we begin downloading all emails from a folder, to keep
 	// the first element selected until they manually change the selection
 	emailsPegSelectionToTop bool
