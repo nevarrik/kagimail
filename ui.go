@@ -126,6 +126,7 @@ func onFetchAllFinished(err error, folder string) {
 func notifyFetchAllFinished(err error, folder string) {
 	g_ui.app.QueueUpdateDraw(func() {
 		onFetchAllFinished(err, folder)
+		g_ui.emailsTable.ScrollToBeginning()
 	})
 }
 
@@ -436,7 +437,7 @@ func updateImapEmailInTable(row int, email Email) {
 }
 
 func insertImapEmailToList(email Email, insertImapEmailOptionFlags uint32) {
-	g_ui.app.QueueUpdateDraw(func() {
+	g_ui.app.QueueUpdate(func() {
 		Assert(
 			g_ui.folderSelected == email.folder,
 			"adding email not from selected folder",
