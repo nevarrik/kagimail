@@ -189,6 +189,15 @@ func notifyFetchEmailBodyFinished(
 	previewPaneSetBody(uid, body)
 }
 
+func notifyEmailDeleted(folder string, seqNum uint32) {
+	g_ui.app.QueueUpdateDraw(func() {
+		k := cachedEmailRemoveViaSeqNum(folder, seqNum)
+		if k != -1 {
+			removeEmailFromList(k)
+		}
+	})
+}
+
 func previewPaneSetBody(uid uint32, body string) {
 	g_ui.app.QueueUpdateDraw(func() {
 		folder := g_ui.folderSelected

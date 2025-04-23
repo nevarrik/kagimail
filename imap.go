@@ -506,11 +506,8 @@ func imapWorker() {
 
 				case *client.ExpungeUpdate:
 					expungeUpdate := update.(*client.ExpungeUpdate)
-					k := cachedEmailRemoveViaSeqNum(
-						folderUpdates, expungeUpdate.SeqNum)
-					if k != -1 {
-						removeEmailFromList(k)
-					}
+					notifyEmailDeleted(folderUpdates, expungeUpdate.SeqNum)
+
 				} // end: switch update.(type)
 			} // end: select
 		} // end: for
