@@ -479,6 +479,11 @@ func insertImapEmailToList(email Email, insertImapEmailOptionFlags uint32) {
 			updateEmailStatusBar(
 				fmt.Sprintf("%s %d emails", verb, g_ui.folderItemCount-g_ui.emailsTable.GetRowCount()))
 		}
+
+		n := g_ui.emailsTable.GetRowCount()
+		if n < 100 && n%20 == 0 || n%100 == 0 {
+			g_ui.app.ForceDraw()
+		}
 	})
 }
 
