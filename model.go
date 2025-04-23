@@ -42,11 +42,11 @@ func cachedEmailFromUidsBinarySearch(emailsUidList []uint32, email Email) int {
 	assertValidFolderName(folder)
 	return sort.Search(len(emailsUidList), func(k int) bool {
 		e := g_emailFromUid[folder][emailsUidList[k]]
-		return !emailCompare(*e, email)
+		return !emailCompare(e, &email)
 	})
 }
 
-func emailCompare(e1 Email, e2 Email) bool {
+func emailCompare(e1 *Email, e2 *Email) bool {
 	if e1.date == e2.date {
 		return e1.uid > e2.uid
 	}
@@ -61,7 +61,7 @@ func cachedEmailByFolderBinarySearchLocked(email Email) int {
 	folder := email.folder
 	assertValidFolderName(folder)
 	return sort.Search(len(g_emailsFromFolder[folder]), func(k int) bool {
-		return !emailCompare(*g_emailsFromFolder[folder][k], email)
+		return !emailCompare(g_emailsFromFolder[folder][k], &email)
 	})
 }
 

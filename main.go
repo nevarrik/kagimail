@@ -108,6 +108,7 @@ func main() {
 
 	go imapInit()
 	go smtpInit()
+	go uiInit()
 
 	err = g_ui.app.Run()
 	if err != nil {

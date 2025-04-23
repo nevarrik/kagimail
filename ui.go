@@ -28,6 +28,50 @@ const (
 	coSelectionTextInactive = "#000000"
 )
 
+func uiInit() {
+	updateEmailRows := func() bool {
+		if len(g_ui.emailsUidList) == 0 {
+			return false
+		}
+
+		folder := g_ui.folderSelected
+		dirty := false
+		for row := 0; row < g_ui.emailsTable.GetRowCount(); row++ {
+			uid := g_ui.emailsUidList[row]
+			email := cachedEmailFromUid(folder, uid)
+
+			du := time.Since(email.date)
+			if du > time.Hour*24 {
+				colText := g_ui.emailsTable.GetCell(row, 2).Text
+				colText_ := FormatAsRelativeTimeIfWithin24Hours(email.date)
+				Assert(colText == colText_, "date format changed in "+
+					"updateImapEmailInTable, revisit this code")
+				break
+			}
+
+			updateImapEmailInTable(row, email)
+			dirty = true
+		}
+
+		return dirty
+	}
+
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			// QueueUpdate instead of QueueUpdateDraw in case
+			// we don't need that call to draw
+			g_ui.app.QueueUpdate(func() {
+				if updateEmailRows() {
+					g_ui.app.ForceDraw()
+				}
+			})
+		}
+	}()
+}
+
 func notifyFetchStarted(folder string, n int, cancel context.CancelFunc) {
 	Assert(IsOnUiThread(), "modifying g_ui should be on ui thread")
 	g_ui.folderItemCount = n
@@ -336,6 +380,41 @@ const (
 	insertImapEmailOptionDownload
 )
 
+func updateImapEmailInTable(row int, email Email) {
+	setCell := func(y int, x int, text string, co string) {
+		_, _, totalWidth, _ := g_ui.emailsTable.GetRect()
+		width := []int{20, totalWidth - 28, 7}[x]
+
+		text_ := text
+		if x != 2 {
+			// pad with spaces, so tview.Table doesn't make column narrower
+			text_ = fmt.Sprintf("%-*s", width, text)
+		}
+
+		cell := tview.NewTableCell(text_).
+			SetTextColor(tcell.GetColor(co)).
+			SetMaxWidth(width)
+
+		if x == 2 {
+			cell.SetAlign(tview.AlignRight)
+		}
+
+		g_ui.emailsTable.SetCell(y, x, cell)
+	}
+
+	co := coEmailUnread
+	if email.isRead {
+		co = coEmailRead
+	}
+	setCell(row, 2, FormatAsRelativeTimeIfWithin24Hours(email.date), co)
+	if email.fromName != "" {
+		setCell(row, 0, email.fromName, co)
+	} else {
+		setCell(row, 0, email.fromAddress, co)
+	}
+	setCell(row, 1, email.subject, co)
+}
+
 func insertImapEmailToList(email Email, insertImapEmailOptionFlags uint32) {
 	g_ui.app.QueueUpdateDraw(func() {
 		Assert(
@@ -355,25 +434,7 @@ func insertImapEmailToList(email Email, insertImapEmailOptionFlags uint32) {
 
 		// insert into table
 		g_ui.emailsTable.InsertRow(i)
-		co := coEmailUnread
-		if email.isRead {
-			co = coEmailRead
-		}
-		setCell := func(y int, x int, text string) {
-			_, _, totalWidth, _ := g_ui.emailsTable.GetRect()
-			width := []int{20, totalWidth - 20}[x]
-			cell := tview.NewTableCell(text).
-				SetTextColor(tcell.GetColor(co)).
-				SetMaxWidth(width)
-			g_ui.emailsTable.SetCell(y, x, cell)
-		}
-		if email.fromName != "" {
-			setCell(i, 0, email.fromName)
-		} else {
-			setCell(i, 0, email.fromAddress)
-		}
-		setCell(i, 1, email.subject)
-
+		updateImapEmailInTable(i, email)
 		Assert(len(g_ui.emailsUidList) == g_ui.emailsTable.GetRowCount(), "")
 
 		// when initially loading before keyboard input, keep top item selected

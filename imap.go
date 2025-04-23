@@ -287,7 +287,7 @@ func imapFetchViaCriteria(
 			} else {
 				emails := collectEmails(ctx, folder, chEmails)
 				sort.Slice(emails, func(i, j int) bool {
-					return emailCompare(*emails[i], *emails[j])
+					return emailCompare(emails[i], emails[j])
 				})
 				for _, email := range emails {
 					if hasCancelled() {

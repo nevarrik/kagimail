@@ -68,3 +68,15 @@ func FormatLocalizedTime(time time.Time) string {
 	return monday.Format(
 		time, longDateFormat+" "+longTimeFormat, locale)
 }
+
+func FormatAsRelativeTimeIfWithin24Hours(ts time.Time) string {
+	du := time.Since(ts)
+	if du < time.Minute {
+		return "~now"
+	} else if du < time.Hour {
+		return fmt.Sprintf("~%dm", int(du.Minutes()))
+	} else if du < time.Hour*24 {
+		return fmt.Sprintf("~%dh", int(du.Hours()))
+	}
+	return ts.Format("2 Jan")
+}
