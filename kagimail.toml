@@ -1,0 +1,5 @@
+imap_host = "imap.fastmail.com"
+smtp_host = "smtp.fastmail.com"
+email = "example@fastmail.com"
+password = "password"
+display_name = "Mark Nevarrik"
